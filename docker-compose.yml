@@ -1,0 +1,64 @@
+# docker-compose.yml
+
+# --- 1. Define our custom network at the top level ---
+networks:
+  llm_toolkit_net:
+    driver: bridge
+
+services:
+  webapp:
+    build: .
+    ports:
+      - "5001:5000"
+    volumes:
+      - ./app:/app/app
+      - ./wsgi.py:/app/wsgi.py
+      - ./run_cli.py:/app/run_cli.py
+      - /var/run/docker.sock:/var/run/docker.sock
+      - garak_io:/garak_io
+    environment:
+      - DATABASE_URL=mysql+pymysql://${MYSQL_USER}:${MYSQL_PASSWORD}@db/${MYSQL_DATABASE}
+      #- GARAK_API_URL=http://garak:5002/evaluate
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - garak
+    restart: always
+    # --- 2. Tell the webapp to join our custom network ---
+    networks:
+      - llm_toolkit_net
+
+  db:
+    image: mysql:8.0
+    command: --default-authentication-plugin=mysql_native_password
+    ports:
+      - "3307:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    restart: always
+    # --- 3. Tell the db service to join our custom network ---
+    networks:
+      - llm_toolkit_net
+
+  garak:
+    build: ./garak_src
+    # The CMD is in the Dockerfile, so the 'command' line is not needed.
+    # --- 4. Tell the garak service to join our custom network ---
+    container_name: garak-runner
+    command: tail -f /dev/null
+    volumes:
+      - garak_io:/garak_io
+    networks:
+      - llm_toolkit_net
+
+volumes:
+  mysql_data: # The garak_io volume for file-based I/O is no longer needed with the API approach,
+
+  # but leaving it here doesn't hurt. You can remove it for cleanliness if you like.
+  garak_io:

@@ -1,0 +1,20 @@
+# Python virtual environment
+.venv/
+venv/
+garak311/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Secrets file
+.env
+
+# Personal notes
+notes.txt
+
+# Local database files
+ci_scan_results.db
+garak_src
+
+.vscode/
