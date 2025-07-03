@@ -12,32 +12,28 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      # --- HUGGING FACE CACHE (PART 1) ---
-      # This step remains the same. It will restore the cache to the host runner.
+      # --- HUGGING FACE CACHE ---
       - name: Cache Hugging Face models
         uses: actions/cache@v4
         with:
           path: ~/.cache/huggingface
-          key: ${{ runner.os }}-huggingface-${{ hashFiles('**/requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-huggingface-
+          key: ${{ runner.os }}-hf-${{ hashFiles('**/requirements.txt') }}
 
-      # --- DOCKER BUILDX CACHE (PART 1) ---
-      # This step also remains the same. It restores the builder cache.
-      - name: Cache Docker layers
-        uses: actions/cache@v4
+      # --- PRE-LOAD MODELS ON HOST ---
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-buildx-staging-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-buildx-staging-
+          python-version: '3.11'
+      - name: Install dependencies on host
+        run: pip install -r requirements.txt
+      - name: Pre-load Garak detectors on host runner
+        run: python -c "from garak.detectors import unsafe_content, dan; _ = unsafe_content.ToxicCommentModel(); _ = dan.DAN()"
 
+      # --- DOCKER STEPS ---
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-        with:
-          driver-opts: "network=host" # Helps with builder network performance
 
-      # Step 3: Build and run Docker Compose
+      # Step 3: Build and run Docker Compose with caching enabled
       - name: Build and run Docker Compose
         env:
           MYSQL_USER: staging_user
@@ -45,36 +41,12 @@ jobs:
           MYSQL_DATABASE: staging_db
           MYSQL_ROOT_PASSWORD: staging_root_password
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          HF_CACHE: ~/.cache/huggingface
         run: |
-          # --- DOCKER BUILDX CACHE (PART 2) ---
-          # We export the cache location to an environment variable
-          # that 'docker compose build' can use.
-          export BUILDKIT_CACHE_DIR=/tmp/.buildx-cache
-
-          # --- HUGGING FACE CACHE (PART 2) ---
-          # We create the cache directory on the host runner IF it doesn't exist.
-          # This prevents a 'docker compose' error.
+          # We must create the directory on the host first, even if empty,
+          # so Docker has something to mount.
           mkdir -p ~/.cache/huggingface
-
-          # --- THE FINAL BUILD & RUN COMMAND ---
-          # We now pass the host's cache directory into the container via a volume
-          # in the 'docker compose up' command itself.
-          docker compose \
-            -f docker-compose.yml \
-            build
-
-          docker compose \
-            -f docker-compose.yml \
-            run \
-            -d \
-            --service-ports \
-            --name webapp-ci \
-            -v ~/.cache/huggingface:/root/.cache/huggingface \
-            webapp
-
-          docker compose \
-            -f docker-compose.yml \
-            up -d db
+          docker compose up --build -d
 
       # Step 4: Wait for services to be ready
       - name: Wait for services

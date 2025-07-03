@@ -13,6 +13,7 @@ services:
       - ./app:/app/app
       - ./wsgi.py:/app/wsgi.py
       - ./run_cli.py:/app/run_cli.py
+      - ${HF_CACHE}:/root/.cache/huggingface
 
     # --- THIS IS THE FIX ---
     # Instead of 'env_file', we define the environment variables directly.
