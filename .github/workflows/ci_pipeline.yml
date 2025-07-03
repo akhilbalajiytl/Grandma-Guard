@@ -53,6 +53,17 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      # --- SPEED FIX: Cache Hugging Face models ---
+      # This step saves the contents of the ~/.cache/huggingface directory
+      # at the end of a successful job and restores it at the beginning of the next.
+      - name: Cache Hugging Face models
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: ${{ runner.os }}-huggingface-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-huggingface-
+
       # Step 2: Set up Docker Buildx (an advanced builder for Docker)
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -94,23 +105,32 @@ jobs:
       # We execute the run_cli.py script inside the running 'webapp' container.
       # We use a simple test model that doesn't require an API key to avoid managing secrets in CI for now.
       # The Garak 'test.Blank' generator just returns empty strings.
+      # --- SUMMARY FIX: Correctly run the scan and save the log ---
+      # We wrap the command in 'bash -c' to ensure the pipe and tee command work correctly.
       - name: Run CLI scan against a test model
-        # We need to pass the env vars to the exec command itself
-        run: >
-          docker compose exec -T
-          -e CI=true
-          -e DATABASE_URL="sqlite:///ci_scan_results.db"
-          -e OPENAI_API_KEY="ci-dummy-key-for-judge"
-          webapp python run_cli.py
-          --model-name "CI Test Run"
-          --api-endpoint "http://test-endpoint"
-          --api-key "test-key"
-          --openai-model "garak:test.Blank"
-
-      # --- NEW: Create a job summary ---
+        run: |
+          bash -c '
+            docker compose exec -T \
+              -e CI=true \
+              -e DATABASE_URL="sqlite:///ci_scan_results.db" \
+              -e OPENAI_API_KEY="ci-dummy-key-for-judge" \
+              webapp python run_cli.py \
+                --model-name "CI Test Run" \
+                --api-endpoint "http://test-endpoint" \
+                --api-key "test-key" \
+                --openai-model "garak:test.Blank" \
+            | tee ci_scan_output.log
+          '
+      
+      # This 'Publish Test Summary' step will now work correctly
       - name: Publish Test Summary
+        # This step only runs if the scan step before it succeeded
+        if: success()
         run: |
           score_line=$(grep 'Score:' ci_scan_output.log | tail -n 1)
+          if [ -z "$score_line" ]; then
+              score_line="Score: Not found"
+          fi
           echo "### 🛡️ LLM Safety Toolkit: Integration Test" >> $GITHUB_STEP_SUMMARY
           echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
           echo "**Result:** ✅ CI Scan Completed" >> $GITHUB_STEP_SUMMARY
@@ -122,9 +142,7 @@ jobs:
           cat ci_scan_output.log >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
           echo "</details>" >> $GITHUB_STEP_SUMMARY
-          
-      # Step 6: Check the logs if the scan failed
-      # This step only runs if the previous step (the scan) failed.
+
       - name: Display container logs on failure
         if: failure()
         run: docker compose logs

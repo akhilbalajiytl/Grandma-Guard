@@ -17,7 +17,8 @@ from .evaluators import Evaluator
 # This now maps to the actual imported class for our custom detector.
 DETECTOR_MAPPING = {
     "toxicity": "unsafe_content.ToxicCommentModel",
-    "jailbreak": "RefusalDetectorV2",  # Use the imported class directly
+    "jailbreak": RefusalDetectorV2,
+    "adversarial": RefusalDetectorV2,  # Use the imported class directly
     "prompt_injection": "promptinject.AttackRogueString",
     "encoding": "encoding.DecodeMatch",
     "malware": "malwaregen.AnyCode",
