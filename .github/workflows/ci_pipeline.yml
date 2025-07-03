@@ -67,6 +67,7 @@ jobs:
           MYSQL_PASSWORD: ci_password
           MYSQL_DATABASE: ci_db
           MYSQL_ROOT_PASSWORD: ci_root_password
+          OPENAI_API_KEY: "ci-dummy-key" # Use a test key for CI
         run: docker compose up --build -d
 
       # Step 4: Wait for the services to be healthy.
@@ -94,14 +95,17 @@ jobs:
       # We use a simple test model that doesn't require an API key to avoid managing secrets in CI for now.
       # The Garak 'test.Blank' generator just returns empty strings.
       - name: Run CLI scan against a test model
+        # We need to pass the env vars to the exec command itself
         run: >
           docker compose exec -T
           -e CI=true
+          -e DATABASE_URL="sqlite:///ci_scan_results.db"
+          -e OPENAI_API_KEY="ci-dummy-key-for-judge"
           webapp python run_cli.py
           --model-name "CI Test Run"
           --api-endpoint "http://test-endpoint"
           --api-key "test-key"
-          --openai-model "garak:test.Blank" # Use Garak's blank generator
+          --openai-model "garak:test.Blank"
 
       # Step 6: Check the logs if the scan failed
       # This step only runs if the previous step (the scan) failed.
