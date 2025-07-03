@@ -2,40 +2,58 @@
 
 name: Manual Staging Test
 
-# This is the key part for a manual trigger.
-# It adds a "Run workflow" button to the Actions tab in GitHub.
 on:
   workflow_dispatch:
 
 jobs:
-  # The job that will run our real-world test.
   staging-test:
     runs-on: ubuntu-latest
     steps:
-      # Step 1: Check out the repository code.
+      # Step 1: Check out the repository code
       - name: Check out repository
         uses: actions/checkout@v4
 
-      # Step 2: Set up Docker.
+      # --- CACHING STEP 1: Cache Hugging Face models ---
+      # This speeds up the 'Pre-loading Garak detectors' step inside your app
+      - name: Cache Hugging Face models
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: ${{ runner.os }}-huggingface-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-huggingface-
+
+      # Step 2: Set up Docker
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Step 3: Build and run the services using Docker Compose.
-      # Notice we are passing the secret API key into the build environment.
+      # --- CACHING STEP 2: Cache Docker layers ---
+      # This speeds up the 'docker compose build' command itself
+      - name: Cache Docker layers
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-staging-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-staging-
+
+      # Step 3: Build and run Docker Compose with caching enabled
       - name: Build and run Docker Compose
         env:
           MYSQL_USER: staging_user
           MYSQL_PASSWORD: staging_password
           MYSQL_DATABASE: staging_db
           MYSQL_ROOT_PASSWORD: staging_root_password
-          # This securely injects the secret into the Docker Compose environment.
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: docker compose up --build -d
+        run: |
+          # Use the cache for building the image
+          docker compose build --cache-from type=gha --cache-to type=gha,mode=max
+          docker compose up -d
 
-      # Step 4: Wait for the services to be ready.
+      # Step 4: Wait for services to be ready
       - name: Wait for services
         run: |
-          echo "Waiting for database to be ready..."
+          echo "Waiting for database..."
           i=0
           while ! docker compose exec -T webapp sh -c 'nc -z db 3306' >/dev/null 2>&1; do
             i=$((i+1))
@@ -49,21 +67,43 @@ jobs:
           done
           echo "Database is ready!"
 
-      # Step 5: Run the REAL scan.
-      # This step also gets the secret key and uses real endpoints/models.
+      # Step 5: Run the REAL scan and save the output to a log file
       - name: Run REAL scan against GPT-3.5-Turbo
-        run: >
-          docker compose exec -T
-          -e CI=true
-          -e DATABASE_URL="sqlite:///ci_scan_results.db"
-          -e OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
-          webapp python run_cli.py
-          --model-name "Staging Test: GPT-3.5-Turbo"
-          --api-endpoint "https://api.openai.com/v1/chat/completions"
-          --api-key "${{ secrets.OPENAI_API_KEY }}"
-          --openai-model "gpt-3.5-turbo"
-      
-      # Step 6: Display logs if the scan failed.
+        run: |
+          bash -c '
+            docker compose exec -T \
+              -e CI=true \
+              -e DATABASE_URL="sqlite:///ci_scan_results.db" \
+              -e OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
+              webapp python run_cli.py \
+                --model-name "Staging Test: GPT-3.5-Turbo" \
+                --api-endpoint "https://api.openai.com/v1/chat/completions" \
+                --api-key "${{ secrets.OPENAI_API_KEY }}" \
+                --openai-model "gpt-3.5-turbo" \
+            | tee staging_scan_output.log
+          '
+          
+      # Step 6: Publish the Job Summary from the log file
+      - name: Publish Test Summary
+        if: success()
+        run: |
+          score_line=$(grep 'Score:' staging_scan_output.log | tail -n 1)
+          if [ -z "$score_line" ]; then
+              score_line="Score: Not found"
+          fi
+          echo "### 🛡️ LLM Safety Toolkit: Manual Staging Test" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Result:** ✅ Real Scan Completed" >> $GITHUB_STEP_SUMMARY
+          echo "**Final Score:** \`${score_line}\`" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "<details><summary>Click to view full scan log</summary>" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat staging_scan_output.log >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "</details>" >> $GITHUB_STEP_SUMMARY
+
+      # Step 7: Display logs only if a step failed
       - name: Display container logs on failure
         if: failure()
         run: docker compose logs
