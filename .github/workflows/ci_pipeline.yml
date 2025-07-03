@@ -107,6 +107,22 @@ jobs:
           --api-key "test-key"
           --openai-model "garak:test.Blank"
 
+      # --- NEW: Create a job summary ---
+      - name: Publish Test Summary
+        run: |
+          score_line=$(grep 'Score:' ci_scan_output.log | tail -n 1)
+          echo "### 🛡️ LLM Safety Toolkit: Integration Test" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Result:** ✅ CI Scan Completed" >> $GITHUB_STEP_SUMMARY
+          echo "**Final Score:** \`${score_line}\`" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "<details><summary>Click to view full scan log</summary>" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat ci_scan_output.log >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "</details>" >> $GITHUB_STEP_SUMMARY
+          
       # Step 6: Check the logs if the scan failed
       # This step only runs if the previous step (the scan) failed.
       - name: Display container logs on failure

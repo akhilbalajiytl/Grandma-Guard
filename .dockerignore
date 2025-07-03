@@ -1,0 +1,32 @@
+# .dockerignore
+
+# Python virtual environments
+.venv/
+venv/
+garak311/
+
+# Git folder
+.git/
+.github/
+
+# Python cache
+__pycache__/
+
+# Secrets file
+.env
+
+# Local database files
+ci_scan_results.db
+
+# VS Code settings
+.vscode/
+
+# Local build artifacts
+*.pyc
+*.pyo
+*.pyd
+
+# Any local log or output files
+*.log
+*.html
+*.csv
