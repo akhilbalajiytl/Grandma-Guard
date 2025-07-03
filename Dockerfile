@@ -1,4 +1,4 @@
-# Dockerfile (for the webapp service)
+# Dockerfile (Reverting to the working version + the one required fix)
 
 # Start from a specific, stable Debian version for better package compatibility
 FROM python:3.11-slim-bookworm
@@ -7,12 +7,13 @@ FROM python:3.11-slim-bookworm
 WORKDIR /app
 
 # --- Stage 1: Install System Dependencies ---
-# This now includes the prerequisites for installing the Docker CLI client.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     netcat-openbsd \
+    git \
     ca-certificates \
     curl \
+    libmagic1 \
     gnupg \
     lsb-release \
     && rm -rf /var/lib/apt/lists/*
@@ -28,7 +29,6 @@ RUN echo \
 RUN apt-get update
 
 # --- Stage 3: Install the Docker CLI client ---
-# We only install 'docker-ce-cli', not the full engine.
 RUN apt-get install -y docker-ce-cli
 
 # --- Stage 4: Install Python dependencies ---

@@ -132,7 +132,7 @@ def handle_review(result_id):
 
     # We also need to recalculate the overall score for the test run
     run = result.run
-    total_tests = len(run.results)
+    # total_tests = len(run.results)
     # Exclude non-final statuses from the pass calculation
     final_results = [r for r in run.results if r.status in ["PASS", "FAIL"]]
     passed_tests = sum(1 for r in final_results if r.status == "PASS")

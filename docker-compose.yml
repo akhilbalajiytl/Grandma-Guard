@@ -14,8 +14,6 @@ services:
       - ./app:/app/app
       - ./wsgi.py:/app/wsgi.py
       - ./run_cli.py:/app/run_cli.py
-      - /var/run/docker.sock:/var/run/docker.sock
-      - garak_io:/garak_io
     environment:
       - DATABASE_URL=mysql+pymysql://${MYSQL_USER}:${MYSQL_PASSWORD}@db/${MYSQL_DATABASE}
       #- GARAK_API_URL=http://garak:5002/evaluate
@@ -23,7 +21,6 @@ services:
       - .env
     depends_on:
       - db
-      - garak
     restart: always
     # --- 2. Tell the webapp to join our custom network ---
     networks:
@@ -43,17 +40,6 @@ services:
       - mysql_data:/var/lib/mysql
     restart: always
     # --- 3. Tell the db service to join our custom network ---
-    networks:
-      - llm_toolkit_net
-
-  garak:
-    build: ./garak_src
-    # The CMD is in the Dockerfile, so the 'command' line is not needed.
-    # --- 4. Tell the garak service to join our custom network ---
-    container_name: garak-runner
-    command: tail -f /dev/null
-    volumes:
-      - garak_io:/garak_io
     networks:
       - llm_toolkit_net
 
