@@ -9,12 +9,11 @@ jobs:
   staging-test:
     runs-on: ubuntu-latest
     steps:
-      # Step 1: Check out the repository code
       - name: Check out repository
         uses: actions/checkout@v4
 
-      # --- CACHING STEP 1: Cache Hugging Face models ---
-      # This speeds up the 'Pre-loading Garak detectors' step inside your app
+      # --- HUGGING FACE CACHE (PART 1) ---
+      # This step remains the same. It will restore the cache to the host runner.
       - name: Cache Hugging Face models
         uses: actions/cache@v4
         with:
@@ -23,12 +22,8 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-huggingface-
 
-      # Step 2: Set up Docker
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      # --- CACHING STEP 2: Cache Docker layers ---
-      # This speeds up the 'docker compose build' command itself
+      # --- DOCKER BUILDX CACHE (PART 1) ---
+      # This step also remains the same. It restores the builder cache.
       - name: Cache Docker layers
         uses: actions/cache@v4
         with:
@@ -37,7 +32,12 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-buildx-staging-
 
-      # Step 3: Build and run Docker Compose with caching enabled
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: "network=host" # Helps with builder network performance
+
+      # Step 3: Build and run Docker Compose
       - name: Build and run Docker Compose
         env:
           MYSQL_USER: staging_user
@@ -45,7 +45,36 @@ jobs:
           MYSQL_DATABASE: staging_db
           MYSQL_ROOT_PASSWORD: staging_root_password
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: docker compose up --build -d
+        run: |
+          # --- DOCKER BUILDX CACHE (PART 2) ---
+          # We export the cache location to an environment variable
+          # that 'docker compose build' can use.
+          export BUILDKIT_CACHE_DIR=/tmp/.buildx-cache
+
+          # --- HUGGING FACE CACHE (PART 2) ---
+          # We create the cache directory on the host runner IF it doesn't exist.
+          # This prevents a 'docker compose' error.
+          mkdir -p ~/.cache/huggingface
+
+          # --- THE FINAL BUILD & RUN COMMAND ---
+          # We now pass the host's cache directory into the container via a volume
+          # in the 'docker compose up' command itself.
+          docker compose \
+            -f docker-compose.yml \
+            build
+
+          docker compose \
+            -f docker-compose.yml \
+            run \
+            -d \
+            --service-ports \
+            --name webapp-ci \
+            -v ~/.cache/huggingface:/root/.cache/huggingface \
+            webapp
+
+          docker compose \
+            -f docker-compose.yml \
+            up -d db
 
       # Step 4: Wait for services to be ready
       - name: Wait for services
