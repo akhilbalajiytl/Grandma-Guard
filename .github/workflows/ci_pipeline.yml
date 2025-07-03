@@ -95,7 +95,7 @@ jobs:
       # The Garak 'test.Blank' generator just returns empty strings.
       - name: Run CLI scan against a test model
         run: >
-          docker-compose exec -T
+          docker compose exec -T
           -e CI=true
           webapp python run_cli.py
           --model-name "CI Test Run"
