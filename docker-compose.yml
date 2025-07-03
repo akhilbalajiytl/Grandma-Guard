@@ -1,6 +1,5 @@
-# docker-compose.yml
+# docker-compose.yml (Final Correct Version)
 
-# --- 1. Define our custom network at the top level ---
 networks:
   llm_toolkit_net:
     driver: bridge
@@ -14,15 +13,21 @@ services:
       - ./app:/app/app
       - ./wsgi.py:/app/wsgi.py
       - ./run_cli.py:/app/run_cli.py
+
+    # --- THIS IS THE FIX ---
+    # Instead of 'env_file', we define the environment variables directly.
+    # Docker Compose will first look for these variables in the host environment
+    # (which we set in the CI job). If it can't find them, it will then look
+    # in a .env file in the project root. This is the perfect behavior.
     environment:
       - DATABASE_URL=mysql+pymysql://${MYSQL_USER}:${MYSQL_PASSWORD}@db/${MYSQL_DATABASE}
-      #- GARAK_API_URL=http://garak:5002/evaluate
-    env_file:
-      - .env
+      # You can add other variables your webapp needs here, like OPENAI_API_KEY
+      # For local runs, it will pick them up from your .env file.
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+
     depends_on:
       - db
     restart: always
-    # --- 2. Tell the webapp to join our custom network ---
     networks:
       - llm_toolkit_net
 
@@ -31,20 +36,19 @@ services:
     command: --default-authentication-plugin=mysql_native_password
     ports:
       - "3307:3306"
+
+    # This section remains the same. It correctly uses variable substitution.
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${MYSQL_DATABASE}
       MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+
     volumes:
       - mysql_data:/var/lib/mysql
     restart: always
-    # --- 3. Tell the db service to join our custom network ---
     networks:
       - llm_toolkit_net
 
 volumes:
-  mysql_data: # The garak_io volume for file-based I/O is no longer needed with the API approach,
-
-  # but leaving it here doesn't hurt. You can remove it for cleanliness if you like.
-  garak_io:
+  mysql_data:
