@@ -63,7 +63,7 @@ jobs:
       - name: Build and run Docker Compose
         env:
           CI: true # This tells your run_cli.py to use the SQLite DB
-        run: docker-compose up --build -d
+        run: docker compose up --build -d
 
       # Step 4: Wait for the services to be healthy.
       # It's important to wait for the database to be ready before running the scan.
@@ -73,7 +73,7 @@ jobs:
           # We'll use a simple loop to wait until the webapp container can connect to the db port
           # This command will retry every 5 seconds, up to 12 times (1 minute total).
           i=0
-          while ! docker-compose exec -T webapp sh -c 'nc -z db 3306' >/dev/null 2>&1; do
+          while ! docker compose exec -T webapp sh -c 'nc -z db 3306' >/dev/null 2>&1; do
             i=$((i+1))
             if [ $i -ge 12 ]; then
               echo "Database did not become available in time."
