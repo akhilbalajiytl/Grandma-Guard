@@ -63,6 +63,10 @@ jobs:
       - name: Build and run Docker Compose
         env:
           CI: true # This tells your run_cli.py to use the SQLite DB
+          MYSQL_USER: ci_user
+          MYSQL_PASSWORD: ci_password
+          MYSQL_DATABASE: ci_db
+          MYSQL_ROOT_PASSWORD: ci_root_password
         run: docker compose up --build -d
 
       # Step 4: Wait for the services to be healthy.
@@ -103,4 +107,4 @@ jobs:
       # This step only runs if the previous step (the scan) failed.
       - name: Display container logs on failure
         if: failure()
-        run: docker-compose logs
+        run: docker compose logs
