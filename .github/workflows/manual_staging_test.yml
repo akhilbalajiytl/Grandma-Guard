@@ -45,10 +45,7 @@ jobs:
           MYSQL_DATABASE: staging_db
           MYSQL_ROOT_PASSWORD: staging_root_password
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: |
-          # Use the cache for building the image
-          docker compose build --cache-from type=gha --cache-to type=gha,mode=max
-          docker compose up -d
+        run: docker compose up --build -d
 
       # Step 4: Wait for services to be ready
       - name: Wait for services
