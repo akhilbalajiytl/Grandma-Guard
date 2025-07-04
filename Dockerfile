@@ -1,4 +1,4 @@
-# Dockerfile (Reverting to the working version + the one required fix)
+# Dockerfile (Final Version with Disk Space Fix)
 
 # Start from a specific, stable Debian version for better package compatibility
 FROM python:3.11-slim-bookworm
@@ -31,9 +31,17 @@ RUN apt-get update
 # --- Stage 3: Install the Docker CLI client ---
 RUN apt-get install -y docker-ce-cli
 
-# --- Stage 4: Install Python dependencies ---
+# --- Stage 4: Install Python dependencies (OPTIMIZED FOR SIZE) ---
 COPY requirements.txt requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+
+# First, install the massive torch dependency, but use the smaller CPU-only version.
+RUN pip install --no-cache-dir torch==2.7.1 --index-url https://download.pytorch.org/whl/cpu
+
+# Now, install all other dependencies from requirements.txt, skipping torch.
+RUN grep -v 'torch' requirements.txt > requirements_no_torch.txt && \
+    pip install --no-cache-dir -r requirements_no_torch.txt && \
+    rm requirements_no_torch.txt
+
 
 # --- Stage 5: Copy application and set up entrypoint ---
 COPY . .

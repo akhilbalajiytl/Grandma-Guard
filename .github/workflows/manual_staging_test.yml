@@ -8,44 +8,43 @@ on:
 jobs:
   staging-test:
     runs-on: ubuntu-latest
+
+    env:
+      MYSQL_USER: staging_user
+      MYSQL_PASSWORD: staging_password
+      MYSQL_DATABASE: staging_db
+      MYSQL_ROOT_PASSWORD: staging_root_password
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+    
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      # --- THIS IS THE FIX for the 'runner' context error ---
+      - name: Set up Environment Variables
+        id: setup_env
+        run: |
+          # Use a special GitHub Actions command to add HF_CACHE to the environment
+          # for all subsequent steps in this job.
+          echo "HF_CACHE=${{ runner.homedir }}/.cache/huggingface" >> $GITHUB_ENV
 
       # --- HUGGING FACE CACHE ---
       - name: Cache Hugging Face models
         uses: actions/cache@v4
         with:
-          path: ~/.cache/huggingface
+          path: ${{ env.HF_CACHE }}
           key: ${{ runner.os }}-hf-${{ hashFiles('**/requirements.txt') }}
-
-      # --- PRE-LOAD MODELS ON HOST ---
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - name: Install dependencies on host
-        run: pip install -r requirements.txt
-      - name: Pre-load Garak detectors on host runner
-        run: python -c "from garak.detectors import unsafe_content, dan; _ = unsafe_content.ToxicCommentModel(); _ = dan.DAN()"
-
-      # --- DOCKER STEPS ---
+                
+        # --- DOCKER STEPS ---
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
       # Step 3: Build and run Docker Compose with caching enabled
       - name: Build and run Docker Compose
-        env:
-          MYSQL_USER: staging_user
-          MYSQL_PASSWORD: staging_password
-          MYSQL_DATABASE: staging_db
-          MYSQL_ROOT_PASSWORD: staging_root_password
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          HF_CACHE: ~/.cache/huggingface
         run: |
           # We must create the directory on the host first, even if empty,
           # so Docker has something to mount.
-          mkdir -p ~/.cache/huggingface
+          mkdir -p ${{ env.HF_CACHE }}
           docker compose up --build -d
 
       # Step 4: Wait for services to be ready
