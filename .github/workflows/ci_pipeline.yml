@@ -48,21 +48,29 @@ jobs:
       contents: read
       packages: write
 
+    # Define the environment variables for the job, just like in the manual workflow.
+    env:
+      CI: true
+      MYSQL_USER: ci_user
+      MYSQL_PASSWORD: ci_password
+      MYSQL_DATABASE: ci_db
+      MYSQL_ROOT_PASSWORD: ci_root_password
+      # Add the cache path variable definition
+      HF_CACHE_PATH: /home/runner/.cache/huggingface
+
     steps:
       # Step 1: Check out the repository code.
       - name: Check out repository
         uses: actions/checkout@v4
 
-      # --- SPEED FIX: Cache Hugging Face models ---
-      # This step saves the contents of the ~/.cache/huggingface directory
-      # at the end of a successful job and restores it at the beginning of the next.
+       # Add the caching step for Hugging Face models.
       - name: Cache Hugging Face models
         uses: actions/cache@v4
         with:
-          path: ~/.cache/huggingface
-          key: ${{ runner.os }}-huggingface-${{ hashFiles('**/requirements.txt') }}
+          path: ${{ env.HF_CACHE_PATH }}
+          key: ${{ runner.os }}-hf-ci-${{ hashFiles('**/requirements.txt') }}
           restore-keys: |
-            ${{ runner.os }}-huggingface-
+            ${{ runner.os }}-hf-ci-
 
       # Step 2: Set up Docker Buildx (an advanced builder for Docker)
       - name: Set up Docker Buildx
@@ -71,15 +79,11 @@ jobs:
       # Step 3: Build and start the services using Docker Compose.
       # We run it in detached mode (-d) so the next step can execute.
       # The 'CI=true' environment variable is used by your run_cli.py script.
+      # This step now inherits the env vars and works correctly.
       - name: Build and run Docker Compose
-        env:
-          CI: true # This tells your run_cli.py to use the SQLite DB
-          MYSQL_USER: ci_user
-          MYSQL_PASSWORD: ci_password
-          MYSQL_DATABASE: ci_db
-          MYSQL_ROOT_PASSWORD: ci_root_password
-          OPENAI_API_KEY: "ci-dummy-key" # Use a test key for CI
-        run: docker compose up --build -d
+        run: |
+          mkdir -p ${{ env.HF_CACHE_PATH }}
+          docker compose up --build -d
 
       # Step 4: Wait for the services to be healthy.
       # It's important to wait for the database to be ready before running the scan.
