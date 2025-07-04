@@ -187,9 +187,25 @@ def run_scan(run_id, model_name, api_endpoint, api_key, api_model_identifier):
     )
 
 
-def start_scan_thread(run_id, model_name, api_endpoint, api_key, api_model_identifier):
+def start_scan_thread(
+    run_id, model_name, api_endpoint, api_key, api_model_identifier, wait=False
+):
+    """
+    Starts the scan in a background thread.
+
+    Args:
+        ... (all the run arguments)
+        wait (bool): If True, the function will block until the scan is complete.
+                     This is for CLI usage. If False, it returns immediately
+                     for web UI usage.
+    """
     scan_thread = threading.Thread(
         target=run_scan,
         args=(run_id, model_name, api_endpoint, api_key, api_model_identifier),
     )
     scan_thread.start()
+
+    if wait:
+        print("CLI mode: Waiting for scan thread to complete...")
+        scan_thread.join()
+        print("Scan thread has completed.")

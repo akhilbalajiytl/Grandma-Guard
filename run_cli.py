@@ -28,18 +28,7 @@ from app.scanner.engine import start_scan_thread
 
 def main():
     parser = argparse.ArgumentParser(description="Run CI/CD Scan for the application")
-    parser.add_argument(
-        "--model-name", required=True, help="Name of the model for the test run"
-    )
-    parser.add_argument(
-        "--api-endpoint", required=True, help="API endpoint URL for the scan"
-    )
-    parser.add_argument("--api-key", required=True, help="API key for authentication")
-    parser.add_argument(
-        "--openai-model",
-        default="gpt-3.5-turbo",
-        help="OpenAI model name (default: gpt-3.5-turbo)",
-    )
+    # ... (all argument parsing is fine) ...
     args = parser.parse_args()
 
     session = db_session()
@@ -56,10 +45,18 @@ def main():
     finally:
         session.close()
 
+    # --- THIS IS THE FIX ---
     # The background scanner will now connect to the MySQL database
+    # We pass wait=True to ensure the main script doesn't exit prematurely.
     start_scan_thread(
-        run_id, args.model_name, args.api_endpoint, args.api_key, args.openai_model
+        run_id,
+        args.model_name,
+        args.api_endpoint,
+        args.api_key,
+        args.openai_model,
+        wait=True,  # This will block here until the scan is finished.
     )
+    print("CLI script finished.")
 
 
 if __name__ == "__main__":
