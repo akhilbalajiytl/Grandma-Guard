@@ -9,23 +9,18 @@ jobs:
   staging-test:
     runs-on: ubuntu-latest
     
-    # Define all static variables for the job.
     env:
       MYSQL_USER: staging_user
       MYSQL_PASSWORD: staging_password
       MYSQL_DATABASE: staging_db
       MYSQL_ROOT_PASSWORD: staging_root_password
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      # --- THE DEFINITIVE FIX (Part 1) ---
-      # We hardcode the known, correct path for the cache here.
-      # This variable will be used by docker-compose.yml.
       HF_CACHE_PATH: /home/runner/.cache/huggingface
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      # This step now uses the hardcoded path.
       - name: Cache Hugging Face models
         uses: actions/cache@v4
         with:
@@ -35,22 +30,33 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # --- THE DEFINITIVE FIX (Part 2) ---
-      - name: Build and run Docker Compose
-        run: |
-          # Use the hardcoded path to create the directory. This cannot fail.
-          mkdir -p /home/runner/.cache/huggingface
-          # The HF_CACHE variable for docker-compose is now inherited from the job's 'env' block.
-          docker compose up --build -d
-          
+      # --- THIS IS THE NEW STRATEGY ---
+      # Step 1: Build all images first
+      - name: Build Docker images
+        run: docker compose build
 
-      - name: Run REAL scan and create log
+      # Step 2: Start ONLY the database service
+      - name: Start Database Service
+        run: docker compose up -d db
+
+      # Step 3: Wait for the database to be healthy
+      - name: Wait for Database
         run: |
-          echo "Services started. Waiting 5 seconds before scan..."
+          echo "Waiting for database to be ready..."
+          # This command waits for the 'db' container to report 'healthy'
+          # It will time out after 2 minutes if the DB isn't ready.
+          docker compose wait -t 120s db
+          echo "Database is ready!"
+      
+      # Step 4: Run the scan using 'docker compose run'
+      # This creates a new container just for our test script. It does NOT
+      # use the entrypoint.sh or start gunicorn.
+      - name: Run Scan via docker compose run
+        run: |
           bash -c '
-            docker compose exec -T \
+            docker compose run --rm \
               -e CI=true \
-              -e DATABASE_URL="sqlite:///ci_scan_results.db" \
+              -e DATABASE_URL="mysql+pymysql://staging_user:staging_password@db/staging_db" \
               -e OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
               webapp python run_cli.py \
                 --model-name "Staging Test: GPT-3.5-Turbo" \
