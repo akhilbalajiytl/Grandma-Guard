@@ -81,21 +81,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: "Build and push CI Docker image"
-        uses: docker/build-push-action@v5
-        with:
-            context: .
-            push: true 
-            tags: ${{ env.DOCKER_IMAGE }}:latest
-            cache-from: type=registry,ref=${{ env.DOCKER_IMAGE }}:buildcache
-            cache-to: type=registry,ref=${{ env.DOCKER_IMAGE }}:buildcache,mode=max
-
       - name: Build and run Docker Compose
-        run: |
-          echo "WEBAPP_IMAGE=${{ env.DOCKER_IMAGE }}:latest" >> $GITHUB_ENV
-          docker compose -f docker-compose.ci.yml up -d
+        env:
+          WEBAPP_IMAGE: ${{ env.DOCKER_IMAGE }}:latest
+        run: docker compose -f docker-compose.ci.yml up -d
 
       - name: Wait for services to be ready
+        env:
+          WEBAPP_IMAGE: ${{ env.DOCKER_IMAGE }}:latest
         run: |
           echo "Waiting for database to be ready..."
           i=0
@@ -112,6 +105,8 @@ jobs:
           echo "Database is ready!"
 
       - name: Run CLI scan against a test model
+        env:
+          WEBAPP_IMAGE: ${{ env.DOCKER_IMAGE }}:latest
         run: |
           bash -c '
             docker compose -f docker-compose.ci.yml exec -T \

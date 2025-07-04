@@ -50,15 +50,18 @@ jobs:
             cache-from: type=registry,ref=${{ env.DOCKER_IMAGE }}:buildcache
             cache-to: type=registry,ref=${{ env.DOCKER_IMAGE }}:buildcache,mode=max
 
-      # --- THIS IS THE FIX ---
-      # We now set the WEBAPP_IMAGE variable for all subsequent steps in the job.
       - name: Run services
+        # --- FIX #1: Set the variable in this step's specific environment ---
+        env:
+          WEBAPP_IMAGE: ${{ env.DOCKER_IMAGE }}:latest
         run: |
-            echo "WEBAPP_IMAGE=${{ env.DOCKER_IMAGE }}:latest" >> $GITHUB_ENV
-            docker compose -f docker-compose.ci.yml up -d
+          # We no longer need 'echo' or 'export' here.
+          docker compose -f docker-compose.ci.yml up -d
 
-      # This step will now work because $WEBAPP_IMAGE is available in its environment
       - name: Wait for Database
+        # --- FIX #2: Also set the variable here for this step's command ---
+        env:
+          WEBAPP_IMAGE: ${{ env.DOCKER_IMAGE }}:latest
         run: |
           echo "Waiting for database to be ready..."
           i=0
@@ -75,8 +78,10 @@ jobs:
           echo ""
           echo "Database is ready!"
       
-      # This step also works now
       - name: Run Scan via docker compose run
+        # --- FIX #3: And set the variable here for the final command ---
+        env:
+          WEBAPP_IMAGE: ${{ env.DOCKER_IMAGE }}:latest
         run: |
           bash -c '
             docker compose -f docker-compose.ci.yml run --rm \
@@ -90,7 +95,7 @@ jobs:
                 --openai-model "gpt-3.5-turbo" \
             | tee staging_scan_output.log
           '
-          
+
       # Step 6: Publish the Job Summary from the log file
       - name: Publish Test Summary
         if: success()
