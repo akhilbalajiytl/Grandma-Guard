@@ -9,41 +9,42 @@ jobs:
   staging-test:
     runs-on: ubuntu-latest
     
-    # We only need the secrets at the job level.
+    # --- THIS IS THE FIX (Part 1) ---
+    # Define all STATIC variables at the job level.
+    # They will be available to all steps.
     env:
+      MYSQL_USER: staging_user
+      MYSQL_PASSWORD: staging_password
+      MYSQL_DATABASE: staging_db
+      MYSQL_ROOT_PASSWORD: staging_root_password
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      # We hardcode the known path for the cache. This is reliable.
+      # --- THIS IS THE FIX (Part 2) ---
+      # Set the DYNAMIC cache path variable for all subsequent steps.
+      - name: Set up Cache Path Variable
+        run: echo "HF_CACHE=${{ runner.homedir }}/.cache/huggingface" >> $GITHUB_ENV
+
+      # This step will use the HF_CACHE variable set in the previous step.
       - name: Cache Hugging Face models
         uses: actions/cache@v4
         with:
-          path: /home/runner/.cache/huggingface
+          path: ${{ env.HF_CACHE }}
           key: ${{ runner.os }}-hf-${{ hashFiles('**/requirements.txt') }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # --- THIS IS THE DEFINITIVE FIX ---
+      # This step now inherits all the necessary env vars from the job and previous step.
       - name: Build and run Docker Compose
-        # We pass the static MYSQL variables directly to this step.
-        env:
-          MYSQL_USER: staging_user
-          MYSQL_PASSWORD: staging_password
-          MYSQL_DATABASE: staging_db
-          MYSQL_ROOT_PASSWORD: staging_root_password
         run: |
-          # Use the literal, hardcoded path. This cannot fail due to variable expansion.
-          CACHE_DIR="/home/runner/.cache/huggingface"
-          mkdir -p $CACHE_DIR
+          mkdir -p ${{ env.HF_CACHE }}
+          docker compose up --build -d
           
-          # Pass this path directly into the docker-compose command's own environment.
-          HF_CACHE=$CACHE_DIR docker compose up --build -d
-
-      # Step 4: Wait for services to be ready
+      # This step will also inherit the env vars and will now succeed.
       - name: Wait for services
         run: |
           echo "Waiting for database..."
@@ -60,8 +61,7 @@ jobs:
           done
           echo "Database is ready!"
 
-      # Step 5: Run the REAL scan and save the output to a log file
-      - name: Run REAL scan against GPT-3.5-Turbo
+      - name: Run REAL scan and create log
         run: |
           bash -c '
             docker compose exec -T \
