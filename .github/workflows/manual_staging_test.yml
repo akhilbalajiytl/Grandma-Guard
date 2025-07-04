@@ -8,6 +8,10 @@ on:
 jobs:
   staging-test:
     runs-on: ubuntu-latest
+    permissions: # Add permissions for writing to GHCR
+      contents: read
+      packages: write
+      
     env:
       # These env vars are available to all steps
       MYSQL_USER: staging_user
@@ -17,10 +21,16 @@ jobs:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       # Define the cache path variable for the entire job
       HF_CACHE_PATH: /home/runner/.cache/huggingface
+      # Define the Docker image name we will use
+      DOCKER_IMAGE: ghcr.io/${{ github.repository_owner }}/llm-safety-toolkit
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      # --- REMOVE UNNECESSARY HOST SETUP ---
+      # We no longer need to install dependencies or preload models on the host runner.
+      # Docker layer caching makes this redundant.
 
       - name: Cache Hugging Face models
         uses: actions/cache@v4
@@ -28,38 +38,50 @@ jobs:
           path: ${{ env.HF_CACHE_PATH }}
           key: ${{ runner.os }}-hf-${{ hashFiles('**/requirements.txt') }}
 
-      - name: Set up Python for pre-loading models
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      
-      - name: Install dependencies on host
-        run: pip install -r requirements.txt
-
-      - name: Pre-load Garak models on host
-        run: |
-          # This populates the cache directory on the host runner
-          python -c "from garak.detectors import unsafe_content; _ = unsafe_content.ToxicCommentModel()"
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # This single step builds and starts both the webapp and db services
-      - name: Build and run services
-        run: docker compose up --build -d
+      # --- NEW: Login to GitHub Container Registry ---
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          
+      # --- NEW: Build and Push Docker image with Cache ---
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+            context: .
+            # Push the image to GHCR. This enables caching.
+            push: true 
+            # Tag the image. We'll use this tag in the docker-compose file.
+            tags: ${{ env.DOCKER_IMAGE }}:latest
+            # Enable build cache from GHCR
+            cache-from: type=registry,ref=${{ env.DOCKER_IMAGE }}:buildcache
+            # Write the new cache layers back to GHCR
+            cache-to: type=registry,ref=${{ env.DOCKER_IMAGE }}:buildcache,mode=max
 
-      # --- THIS IS THE DEFINITIVE FIX ---
+      # --- MODIFIED: Run services using the pre-built image ---
+      # We no longer use '--build'. 'docker compose' will automatically pull
+      # the image we just pushed to the registry.
+      - name: Run services
+        run: |
+            # We need to tell docker-compose which image to use for the webapp service
+            # We do this by setting an environment variable before running 'up'
+            export WEBAPP_IMAGE=${{ env.DOCKER_IMAGE }}:latest
+            docker compose -f docker-compose.ci.yml up -d
+
       - name: Wait for Database
         run: |
           echo "Waiting for database to be ready..."
           i=0
-          # This loop uses 'docker compose run' to execute the check from a container
-          # on the right network. It will try for up to 2 minutes.
-          while ! docker compose run --rm webapp sh -c "nc -z db 3306"; do
+          while ! docker compose -f docker-compose.ci.yml run --rm webapp sh -c "nc -z db 3306"; do
             i=$((i+1))
             if [ $i -ge 24 ]; then
               echo "Database did not become available in time."
-              docker compose logs db
+              docker compose -f docker-compose.ci.yml logs db
               exit 1
             fi
             echo -n "."
@@ -68,13 +90,10 @@ jobs:
           echo ""
           echo "Database is ready!"
       
-      # Step 4: Run the scan using 'docker compose run'
-      # This creates a new container just for our test script. It does NOT
-      # use the entrypoint.sh or start gunicorn.
       - name: Run Scan via docker compose run
         run: |
           bash -c '
-            docker compose run --rm \
+            docker compose -f docker-compose.ci.yml run --rm \
               -e CI=true \
               -e DATABASE_URL="mysql+pymysql://staging_user:staging_password@db/staging_db" \
               -e OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
@@ -85,7 +104,6 @@ jobs:
                 --openai-model "gpt-3.5-turbo" \
             | tee staging_scan_output.log
           '
-          
       # Step 6: Publish the Job Summary from the log file
       - name: Publish Test Summary
         if: success()

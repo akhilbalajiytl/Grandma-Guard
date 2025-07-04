@@ -56,3 +56,28 @@ def call_llm_api(endpoint, api_key, prompt, api_model_identifier):
             )
     except requests.exceptions.RequestException as e:
         return f"API Error: {e}"
+
+
+# NEW asynchronous version
+async def async_call_llm_api(session, api_endpoint, api_key, prompt, model_identifier):
+    """Asynchronously calls the LLM API using an aiohttp session."""
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    payload = {
+        "model": model_identifier,
+        "messages": [{"role": "user", "content": prompt}],
+    }
+
+    try:
+        async with session.post(
+            api_endpoint, headers=headers, json=payload, timeout=120
+        ) as response:
+            if response.status == 200:
+                data = await response.json()
+                return data["choices"][0]["message"]["content"].strip()
+            else:
+                error_text = await response.text()
+                print(f"API Error: Status {response.status}, Response: {error_text}")
+                return f"API_ERROR: Status {response.status}"
+    except Exception as e:
+        print(f"Network/Request Error: {e}")
+        return f"NETWORK_ERROR: {e}"

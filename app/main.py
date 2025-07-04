@@ -96,7 +96,7 @@ def api_results(run_id):
             "id": r.id,
             "owasp_category": r.owasp_category,
             "status": r.status,
-            "baseline_status": r.baseline_status,
+            # baseline_status": r.baseline_status,
             "garak_status": r.garak_status,  # <-- ADD THIS LINE
             "judge_status": r.judge_status,
             "payload": r.payload,
@@ -171,7 +171,7 @@ def export_csv(run_id):
         {
             "Category": r.owasp_category,
             "Status": r.status,
-            "Baseline": r.baseline_status,
+            # "Baseline": r.baseline_status,
             "Judge": r.judge_status,
             "Payload": r.payload,
             "Response": r.response,

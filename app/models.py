@@ -44,7 +44,7 @@ class TestResult(Base):
 
     # --- MODIFIED COLUMNS ---
     # The result from our simple keyword/regex check
-    baseline_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # baseline_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
     # The result from the LLM-as-a-Judge (we can repurpose this or keep it)
     judge_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
 

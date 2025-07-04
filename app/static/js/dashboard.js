@@ -58,7 +58,6 @@ async function loadRunDetails(runId) {
         <th>Category</th>
         <th>Payload</th>
         <th>Response</th>
-        <th>Baseline</th>
         <th>Garak</th>
         <th>Judge</th>
         <th>Final Status</th>
@@ -82,7 +81,7 @@ async function loadRunDetails(runId) {
         const categoryCell = row.insertCell();
         const payloadCell = row.insertCell();
         const responseCell = row.insertCell();
-        const baselineCell = row.insertCell();
+        // const baselineCell = row.insertCell();
         const garakCell = row.insertCell();
         const judgeCell = row.insertCell();
         const statusCell = row.insertCell();
@@ -98,7 +97,7 @@ async function loadRunDetails(runId) {
         responsePre.textContent = result.response;
         responseCell.appendChild(responsePre);
 
-        baselineCell.textContent = result.baseline_status;
+        // baselineCell.textContent = result.baseline_status;
         garakCell.textContent = result.garak_status || 'N/A';
         judgeCell.textContent = result.judge_status;
         statusCell.textContent = result.status;
