@@ -94,7 +94,8 @@ jobs:
                 --api-endpoint "https://api.openai.com/v1/chat/completions" \
                 --api-key "${{ secrets.OPENAI_API_KEY }}" \
                 --openai-model "gpt-3.5-turbo" \
-          ' | tee staging_scan_output.log
+              | tee staging_scan_output.log
+            '
 
       # Step 6: Publish the Job Summary from the log file
       - name: Publish Test Summary
