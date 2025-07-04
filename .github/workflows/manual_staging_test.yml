@@ -45,7 +45,7 @@ jobs:
           echo "Waiting for database to be ready..."
           # This command waits for the 'db' container to report 'healthy'
           # It will time out after 2 minutes if the DB isn't ready.
-          docker compose wait -t 120s db
+          docker compose wait --timeout 120s db
           echo "Database is ready!"
       
       # Step 4: Run the scan using 'docker compose run'
