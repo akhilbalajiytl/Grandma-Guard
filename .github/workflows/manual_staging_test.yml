@@ -50,13 +50,9 @@ jobs:
             cache-from: type=registry,ref=${{ env.DOCKER_IMAGE }}:buildcache
             cache-to: type=registry,ref=${{ env.DOCKER_IMAGE }}:buildcache,mode=max
 
-      - name: Run services
-        # --- FIX #1: Set the variable in this step's specific environment ---
-        env:
-          WEBAPP_IMAGE: ${{ env.DOCKER_IMAGE }}:latest
-        run: |
-          # We no longer need 'echo' or 'export' here.
-          docker compose -f docker-compose.ci.yml up -d
+      - name: Run services (using local build)
+        # We will NOT use the pre-built image for this test
+        run: docker compose -f docker-compose.yml up --build -d # Use original file and --build
 
       - name: Wait for Database
         # --- FIX #2: Also set the variable here for this step's command ---
@@ -87,7 +83,7 @@ jobs:
           WEBAPP_IMAGE: ${{ env.DOCKER_IMAGE }}:latest
         run: |
           set -o pipefail
-          docker compose -f docker-compose.ci.yml run --rm \
+          docker compose -f docker-compose.yml exec -T \
             --entrypoint "" \
             -e CI=true \
             -e DATABASE_URL="mysql+pymysql://staging_user:staging_password@db/staging_db" \
