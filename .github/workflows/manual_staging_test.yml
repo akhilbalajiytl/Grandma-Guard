@@ -39,13 +39,24 @@ jobs:
       - name: Start Database Service
         run: docker compose up -d db
 
-      # Step 3: Wait for the database to be healthy
+      # --- THIS IS THE DEFINITIVE FIX ---
       - name: Wait for Database
         run: |
           echo "Waiting for database to be ready..."
-          # This command waits for the 'db' container to report 'healthy'
-          # It will time out after 2 minutes if the DB isn't ready.
-          docker compose wait --timeout 120s db
+          i=0
+          # This loop uses 'docker compose run' to execute the check from a container
+          # on the right network. It will try for up to 2 minutes.
+          while ! docker compose run --rm webapp sh -c "nc -z db 3306"; do
+            i=$((i+1))
+            if [ $i -ge 24 ]; then
+              echo "Database did not become available in time."
+              docker compose logs db
+              exit 1
+            fi
+            echo -n "."
+            sleep 5
+          done
+          echo ""
           echo "Database is ready!"
       
       # Step 4: Run the scan using 'docker compose run'
