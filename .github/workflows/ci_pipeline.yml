@@ -55,15 +55,14 @@ jobs:
       MYSQL_PASSWORD: ci_password
       MYSQL_DATABASE: ci_db
       MYSQL_ROOT_PASSWORD: ci_root_password
-      # Add the cache path variable definition
       HF_CACHE_PATH: /home/runner/.cache/huggingface
+      # Define the Docker image name, consistent with the manual workflow
+      DOCKER_IMAGE: ghcr.io/${{ github.repository_owner }}/llm-safety-toolkit-ci
 
     steps:
-      # Step 1: Check out the repository code.
       - name: Check out repository
         uses: actions/checkout@v4
 
-       # Add the caching step for Hugging Face models.
       - name: Cache Hugging Face models
         uses: actions/cache@v4
         with:
@@ -72,32 +71,39 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-hf-ci-
 
-      # Step 2: Set up Docker Buildx (an advanced builder for Docker)
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Step 3: Build and start the services using Docker Compose.
-      # We run it in detached mode (-d) so the next step can execute.
-      # The 'CI=true' environment variable is used by your run_cli.py script.
-      # This step now inherits the env vars and works correctly.
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: "Build and push CI Docker image"
+        uses: docker/build-push-action@v5
+        with:
+            context: .
+            push: true 
+            tags: ${{ env.DOCKER_IMAGE }}:latest
+            cache-from: type=registry,ref=${{ env.DOCKER_IMAGE }}:buildcache
+            cache-to: type=registry,ref=${{ env.DOCKER_IMAGE }}:buildcache,mode=max
+
       - name: Build and run Docker Compose
         run: |
-          mkdir -p ${{ env.HF_CACHE_PATH }}
-          docker compose up --build -d
+          echo "WEBAPP_IMAGE=${{ env.DOCKER_IMAGE }}:latest" >> $GITHUB_ENV
+          docker compose -f docker-compose.ci.yml up -d
 
-      # Step 4: Wait for the services to be healthy.
-      # It's important to wait for the database to be ready before running the scan.
       - name: Wait for services to be ready
         run: |
           echo "Waiting for database to be ready..."
-          # We'll use a simple loop to wait until the webapp container can connect to the db port
-          # This command will retry every 5 seconds, up to 12 times (1 minute total).
           i=0
-          while ! docker compose exec -T webapp sh -c 'nc -z db 3306' >/dev/null 2>&1; do
+          while ! docker compose -f docker-compose.ci.yml run --rm webapp sh -c 'nc -z db 3306' >/dev/null 2>&1; do
             i=$((i+1))
             if [ $i -ge 12 ]; then
               echo "Database did not become available in time."
-              docker-compose logs db
+              docker-compose -f docker-compose.ci.yml logs db
               exit 1
             fi
             echo -n "."
@@ -105,16 +111,10 @@ jobs:
           done
           echo "Database is ready!"
 
-      # Step 5: Run the CLI Scan
-      # We execute the run_cli.py script inside the running 'webapp' container.
-      # We use a simple test model that doesn't require an API key to avoid managing secrets in CI for now.
-      # The Garak 'test.Blank' generator just returns empty strings.
-      # --- SUMMARY FIX: Correctly run the scan and save the log ---
-      # We wrap the command in 'bash -c' to ensure the pipe and tee command work correctly.
       - name: Run CLI scan against a test model
         run: |
           bash -c '
-            docker compose exec -T \
+            docker compose -f docker-compose.ci.yml exec -T \
               -e CI=true \
               -e DATABASE_URL="sqlite:///ci_scan_results.db" \
               -e OPENAI_API_KEY="ci-dummy-key-for-judge" \

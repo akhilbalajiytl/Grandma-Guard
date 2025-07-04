@@ -1,4 +1,4 @@
-# .github/workflows/manual_staging_test.yml
+# .github/workflows/manual_staging_test.yml (Corrected)
 
 name: Manual Staging Test
 
@@ -8,29 +8,22 @@ on:
 jobs:
   staging-test:
     runs-on: ubuntu-latest
-    permissions: # Add permissions for writing to GHCR
+    permissions:
       contents: read
       packages: write
       
     env:
-      # These env vars are available to all steps
       MYSQL_USER: staging_user
       MYSQL_PASSWORD: staging_password
       MYSQL_DATABASE: staging_db
       MYSQL_ROOT_PASSWORD: staging_root_password
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      # Define the cache path variable for the entire job
       HF_CACHE_PATH: /home/runner/.cache/huggingface
-      # Define the Docker image name we will use
       DOCKER_IMAGE: ghcr.io/${{ github.repository_owner }}/llm-safety-toolkit
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-
-      # --- REMOVE UNNECESSARY HOST SETUP ---
-      # We no longer need to install dependencies or preload models on the host runner.
-      # Docker layer caching makes this redundant.
 
       - name: Cache Hugging Face models
         uses: actions/cache@v4
@@ -41,7 +34,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # --- NEW: Login to GitHub Container Registry ---
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -49,30 +41,23 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
           
-      # --- NEW: Build and Push Docker image with Cache ---
-      - name: Build and push Docker image
+      - name: "Build and push Docker image"
         uses: docker/build-push-action@v5
         with:
             context: .
-            # Push the image to GHCR. This enables caching.
             push: true 
-            # Tag the image. We'll use this tag in the docker-compose file.
             tags: ${{ env.DOCKER_IMAGE }}:latest
-            # Enable build cache from GHCR
             cache-from: type=registry,ref=${{ env.DOCKER_IMAGE }}:buildcache
-            # Write the new cache layers back to GHCR
             cache-to: type=registry,ref=${{ env.DOCKER_IMAGE }}:buildcache,mode=max
 
-      # --- MODIFIED: Run services using the pre-built image ---
-      # We no longer use '--build'. 'docker compose' will automatically pull
-      # the image we just pushed to the registry.
+      # --- THIS IS THE FIX ---
+      # We now set the WEBAPP_IMAGE variable for all subsequent steps in the job.
       - name: Run services
         run: |
-            # We need to tell docker-compose which image to use for the webapp service
-            # We do this by setting an environment variable before running 'up'
-            export WEBAPP_IMAGE=${{ env.DOCKER_IMAGE }}:latest
+            echo "WEBAPP_IMAGE=${{ env.DOCKER_IMAGE }}:latest" >> $GITHUB_ENV
             docker compose -f docker-compose.ci.yml up -d
 
+      # This step will now work because $WEBAPP_IMAGE is available in its environment
       - name: Wait for Database
         run: |
           echo "Waiting for database to be ready..."
@@ -90,6 +75,7 @@ jobs:
           echo ""
           echo "Database is ready!"
       
+      # This step also works now
       - name: Run Scan via docker compose run
         run: |
           bash -c '
@@ -104,6 +90,7 @@ jobs:
                 --openai-model "gpt-3.5-turbo" \
             | tee staging_scan_output.log
           '
+          
       # Step 6: Publish the Job Summary from the log file
       - name: Publish Test Summary
         if: success()
