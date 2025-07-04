@@ -52,7 +52,7 @@ jobs:
               -e CI=true \
               -e DATABASE_URL="sqlite:///ci_scan_results.db" \
               -e OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
-              webapp python run_cli.py \
+              webapp python3 run_cli.py \
                 --model-name "Staging Test: GPT-3.5-Turbo" \
                 --api-endpoint "https://api.openai.com/v1/chat/completions" \
                 --api-key "${{ secrets.OPENAI_API_KEY }}" \
