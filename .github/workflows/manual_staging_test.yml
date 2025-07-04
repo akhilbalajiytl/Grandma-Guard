@@ -8,8 +8,8 @@ on:
 jobs:
   staging-test:
     runs-on: ubuntu-latest
-
-      # Define static variables for the whole job
+    
+    # Define only the static secrets and variables at the job level.
     env:
       MYSQL_USER: staging_user
       MYSQL_PASSWORD: staging_password
@@ -21,27 +21,24 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      # --- THIS IS THE FIX (Part 1) ---
-      # We correctly define the HF_CACHE path using the runner's home directory.
-      - name: Set up Cache Path Variable
-        run: echo "HF_CACHE=${{ runner.homedir }}/.cache/huggingface" >> $GITHUB_ENV
-
-      # This step now uses the correctly defined path from the step above.
+      # We directly use the runner.homedir context here. This is reliable.
       - name: Cache Hugging Face models
         uses: actions/cache@v4
         with:
-          path: ${{ env.HF_CACHE }}
+          path: ${{ runner.homedir }}/.cache/huggingface
           key: ${{ runner.os }}-hf-${{ hashFiles('**/requirements.txt') }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # --- THIS IS THE FIX (Part 2) ---
-      # This step now uses the correct path for mkdir and inherits the env var for docker-compose.
+      # This is the key fix. We pass the path directly into the docker-compose command's env.
       - name: Build and run Docker Compose
+        # This HF_CACHE variable is only for this step.
+        env:
+          HF_CACHE: ${{ runner.homedir }}/.cache/huggingface
         run: |
-          # Create the directory inside the user's home, where we have permission.
-          mkdir -p ${{ env.HF_CACHE }}
+          # Create the directory using the same, reliable path.
+          mkdir -p ${{ runner.homedir }}/.cache/huggingface
           docker compose up --build -d
 
       # Step 4: Wait for services to be ready
