@@ -6,6 +6,11 @@ FROM python:3.11-slim-bookworm
 # Set the working directory
 WORKDIR /app
 
+# Add Python's bin and local bin directories to the system's PATH.
+# This ensures that any command run in the container can find executables
+# installed by pip (like gunicorn) and the correct python interpreter.
+ENV PATH=/root/.local/bin:/usr/local/bin:$PATH
+
 # --- Stage 1: Install System Dependencies ---
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
