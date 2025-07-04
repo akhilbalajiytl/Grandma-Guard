@@ -43,25 +43,10 @@ jobs:
           # The HF_CACHE variable for docker-compose is now inherited from the job's 'env' block.
           docker compose up --build -d
           
-      # This step will also inherit the env vars and will now succeed.
-      - name: Wait for services
-        run: |
-          echo "Waiting for database..."
-          i=0
-          while ! docker compose exec -T webapp sh -c 'nc -z db 3306' >/dev/null 2>&1; do
-            i=$((i+1))
-            if [ $i -ge 12 ]; then
-              echo "Database did not become available in time."
-              docker compose logs db
-              exit 1
-            fi
-            echo -n "."
-            sleep 5
-          done
-          echo "Database is ready!"
 
       - name: Run REAL scan and create log
         run: |
+          echo "Services started. Waiting 5 seconds before scan..."
           bash -c '
             docker compose exec -T \
               -e CI=true \
