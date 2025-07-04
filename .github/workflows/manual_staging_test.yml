@@ -9,39 +9,38 @@ jobs:
   staging-test:
     runs-on: ubuntu-latest
     
-    # --- THIS IS THE FIX (Part 1) ---
-    # Define all STATIC variables at the job level.
-    # They will be available to all steps.
+    # Define all static variables for the job.
     env:
       MYSQL_USER: staging_user
       MYSQL_PASSWORD: staging_password
       MYSQL_DATABASE: staging_db
       MYSQL_ROOT_PASSWORD: staging_root_password
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      # --- THE DEFINITIVE FIX (Part 1) ---
+      # We hardcode the known, correct path for the cache here.
+      # This variable will be used by docker-compose.yml.
+      HF_CACHE_PATH: /home/runner/.cache/huggingface
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      # --- THIS IS THE FIX (Part 2) ---
-      # Set the DYNAMIC cache path variable for all subsequent steps.
-      - name: Set up Cache Path Variable
-        run: echo "HF_CACHE=${{ runner.homedir }}/.cache/huggingface" >> $GITHUB_ENV
-
-      # This step will use the HF_CACHE variable set in the previous step.
+      # This step now uses the hardcoded path.
       - name: Cache Hugging Face models
         uses: actions/cache@v4
         with:
-          path: ${{ env.HF_CACHE }}
+          path: ${{ env.HF_CACHE_PATH }}
           key: ${{ runner.os }}-hf-${{ hashFiles('**/requirements.txt') }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # This step now inherits all the necessary env vars from the job and previous step.
+      # --- THE DEFINITIVE FIX (Part 2) ---
       - name: Build and run Docker Compose
         run: |
-          mkdir -p ${{ env.HF_CACHE }}
+          # Use the hardcoded path to create the directory. This cannot fail.
+          mkdir -p /home/runner/.cache/huggingface
+          # The HF_CACHE variable for docker-compose is now inherited from the job's 'env' block.
           docker compose up --build -d
           
       # This step will also inherit the env vars and will now succeed.
