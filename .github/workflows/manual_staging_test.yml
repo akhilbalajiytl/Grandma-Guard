@@ -9,41 +9,38 @@ jobs:
   staging-test:
     runs-on: ubuntu-latest
 
+      # Define static variables for the whole job
     env:
       MYSQL_USER: staging_user
       MYSQL_PASSWORD: staging_password
       MYSQL_DATABASE: staging_db
       MYSQL_ROOT_PASSWORD: staging_root_password
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-    
+
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      # --- THIS IS THE FIX for the 'runner' context error ---
-      - name: Set up Environment Variables
-        id: setup_env
-        run: |
-          # Use a special GitHub Actions command to add HF_CACHE to the environment
-          # for all subsequent steps in this job.
-          echo "HF_CACHE=${{ runner.homedir }}/.cache/huggingface" >> $GITHUB_ENV
+      # --- THIS IS THE FIX (Part 1) ---
+      # We correctly define the HF_CACHE path using the runner's home directory.
+      - name: Set up Cache Path Variable
+        run: echo "HF_CACHE=${{ runner.homedir }}/.cache/huggingface" >> $GITHUB_ENV
 
-      # --- HUGGING FACE CACHE ---
+      # This step now uses the correctly defined path from the step above.
       - name: Cache Hugging Face models
         uses: actions/cache@v4
         with:
           path: ${{ env.HF_CACHE }}
           key: ${{ runner.os }}-hf-${{ hashFiles('**/requirements.txt') }}
-                
-        # --- DOCKER STEPS ---
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Step 3: Build and run Docker Compose with caching enabled
+      # --- THIS IS THE FIX (Part 2) ---
+      # This step now uses the correct path for mkdir and inherits the env var for docker-compose.
       - name: Build and run Docker Compose
         run: |
-          # We must create the directory on the host first, even if empty,
-          # so Docker has something to mount.
+          # Create the directory inside the user's home, where we have permission.
           mkdir -p ${{ env.HF_CACHE }}
           docker compose up --build -d
 
