@@ -8,14 +8,13 @@ on:
 jobs:
   staging-test:
     runs-on: ubuntu-latest
-    
     env:
+      # These env vars are available to all steps
       MYSQL_USER: staging_user
       MYSQL_PASSWORD: staging_password
       MYSQL_DATABASE: staging_db
       MYSQL_ROOT_PASSWORD: staging_root_password
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      HF_CACHE_PATH: /home/runner/.cache/huggingface
 
     steps:
       - name: Check out repository
@@ -24,20 +23,30 @@ jobs:
       - name: Cache Hugging Face models
         uses: actions/cache@v4
         with:
-          path: ${{ env.HF_CACHE_PATH }}
+          path: ~/.cache/huggingface
           key: ${{ runner.os }}-hf-${{ hashFiles('**/requirements.txt') }}
+
+      - name: Set up Python for pre-loading models
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies on host
+        run: pip install -r requirements.txt
+
+      - name: Pre-load Garak models on host
+        run: |
+          # This populates the cache directory on the host runner
+          python -c "from garak.detectors import unsafe_content; _ = unsafe_content.ToxicCommentModel()"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # --- THIS IS THE NEW STRATEGY ---
-      # Step 1: Build all images first
-      - name: Build Docker images
-        run: docker compose build
-
-      # Step 2: Start ONLY the database service
-      - name: Start Database Service
-        run: docker compose up -d db
+      # This single step builds and starts both the webapp and db services
+      - name: Build and run services
+        run: |
+          mkdir -p ~/.cache/huggingface
+          docker compose up --build -d
 
       # --- THIS IS THE DEFINITIVE FIX ---
       - name: Wait for Database

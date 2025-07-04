@@ -45,6 +45,11 @@ RUN \
     # Now, install all other requirements from the file, skipping torch if it's re-listed
     pip install --no-cache-dir -r requirements.txt
 
+
+# Stage 3: Copy the cached Hugging Face models into the image
+# This command will run on the GitHub Actions host runner.
+# The 'hf_cache' directory will be created by the CI workflow.
+COPY hf_cache /root/.cache/huggingface
 # --- Stage 3: Copy application code ---
 COPY . .
 
