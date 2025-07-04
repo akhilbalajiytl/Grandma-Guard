@@ -9,37 +9,39 @@ jobs:
   staging-test:
     runs-on: ubuntu-latest
     
-    # Define only the static secrets and variables at the job level.
+    # We only need the secrets at the job level.
     env:
-      MYSQL_USER: staging_user
-      MYSQL_PASSWORD: staging_password
-      MYSQL_DATABASE: staging_db
-      MYSQL_ROOT_PASSWORD: staging_root_password
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      # We directly use the runner.homedir context here. This is reliable.
+      # We hardcode the known path for the cache. This is reliable.
       - name: Cache Hugging Face models
         uses: actions/cache@v4
         with:
-          path: ${{ runner.homedir }}/.cache/huggingface
+          path: /home/runner/.cache/huggingface
           key: ${{ runner.os }}-hf-${{ hashFiles('**/requirements.txt') }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # This is the key fix. We pass the path directly into the docker-compose command's env.
+      # --- THIS IS THE DEFINITIVE FIX ---
       - name: Build and run Docker Compose
-        # This HF_CACHE variable is only for this step.
+        # We pass the static MYSQL variables directly to this step.
         env:
-          HF_CACHE: ${{ runner.homedir }}/.cache/huggingface
+          MYSQL_USER: staging_user
+          MYSQL_PASSWORD: staging_password
+          MYSQL_DATABASE: staging_db
+          MYSQL_ROOT_PASSWORD: staging_root_password
         run: |
-          # Create the directory using the same, reliable path.
-          mkdir -p ${{ runner.homedir }}/.cache/huggingface
-          docker compose up --build -d
+          # Use the literal, hardcoded path. This cannot fail due to variable expansion.
+          CACHE_DIR="/home/runner/.cache/huggingface"
+          mkdir -p $CACHE_DIR
+          
+          # Pass this path directly into the docker-compose command's own environment.
+          HF_CACHE=$CACHE_DIR docker compose up --build -d
 
       # Step 4: Wait for services to be ready
       - name: Wait for services
