@@ -9,7 +9,7 @@ WORKDIR /app
 # Add Python's bin and local bin directories to the system's PATH.
 # This ensures that any command run in the container can find executables
 # installed by pip (like gunicorn) and the correct python interpreter.
-ENV PATH=/root/.local/bin:/usr/local/bin:$PATH
+ENV PATH=/root/.local/bin:$PATH
 
 # --- Stage 1: Install System Dependencies ---
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -37,15 +37,17 @@ RUN apt-get update
 RUN apt-get install -y docker-ce-cli
 
 # --- Stage 4: Install Python dependencies (OPTIMIZED FOR SIZE) ---
-COPY requirements.txt requirements.txt
+COPY requirements.txt .
+RUN \
+    # Install the smaller, CPU-only version of torch first
+    pip install --no-cache-dir torch==2.7.1 --index-url https://download.pytorch.org/whl/cpu && \
+    \
+    # Now, install all other requirements from the file, skipping torch if it's re-listed
+    pip install --no-cache-dir -r requirements.txt
 
-# First, install the massive torch dependency, but use the smaller CPU-only version.
-RUN pip install --no-cache-dir torch==2.7.1 --index-url https://download.pytorch.org/whl/cpu
+# --- Stage 3: Copy application code ---
+COPY . .
 
-# Now, install all other dependencies from requirements.txt, skipping torch.
-RUN grep -v 'torch' requirements.txt > requirements_no_torch.txt && \
-    pip install --no-cache-dir -r requirements_no_torch.txt && \
-    rm requirements_no_torch.txt
 
 
 # --- Stage 5: Copy application and set up entrypoint ---
