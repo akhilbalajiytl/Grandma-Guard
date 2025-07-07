@@ -84,7 +84,6 @@ jobs:
         run: |
           set -o pipefail
           docker compose -f docker-compose.yml exec -T \
-            --entrypoint "" \
             -e CI=true \
             -e DATABASE_URL="mysql+pymysql://staging_user:staging_password@db/staging_db" \
             -e OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
