@@ -6,7 +6,11 @@ networks:
 
 services:
   webapp:
-    build: .
+    # --- THIS IS THE FIX ---
+    # Use the override variable if it's set, otherwise fall back to building locally.
+    image: ${WEBAPP_IMAGE_OVERRIDE:-}
+    build:
+      context: .
     ports:
       - "5001:5000"
     volumes:
