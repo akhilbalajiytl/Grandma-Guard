@@ -1,4 +1,4 @@
-# .github/workflows/manual_staging_test.yml (Corrected)
+# .github/workflows/manual_staging_test.yml (The Actual, Final, Corrected Version)
 
 name: Manual Staging Test
 
@@ -50,18 +50,25 @@ jobs:
             cache-from: type=registry,ref=${{ env.DOCKER_IMAGE }}:buildcache
             cache-to: type=registry,ref=${{ env.DOCKER_IMAGE }}:buildcache,mode=max
 
-      - name: Run services (using local build)
-        # We will NOT use the pre-built image for this test
-        run: docker compose -f docker-compose.yml up --build -d # Use original file and --build
+      # Step 1: Start ONLY the background service (the database).
+      # We use docker-compose.ci.yml and only specify the 'db' service to start.
+      # The webapp service is NOT started as a long-lived process here.
+      - name: Start Database Service
+        env:
+          WEBAPP_IMAGE: ${{ env.DOCKER_IMAGE }}:latest # Still needed for docker compose's internal variable substitution
+        run: docker compose -f docker-compose.ci.yml up -d db
 
+      # Step 2: Use 'docker compose run' to create a temporary container
+      # just to check if the 'db' service is healthy.
+      # We still need --entrypoint "" here because 'sh -c "nc -z db 3306"'
+      # is the command we want to run, not the webapp's default entrypoint.
       - name: Wait for Database
-        # --- FIX #2: Also set the variable here for this step's command ---
         env:
           WEBAPP_IMAGE: ${{ env.DOCKER_IMAGE }}:latest
         run: |
           echo "Waiting for database to be ready..."
           i=0
-          while ! docker compose -f docker-compose.ci.yml run --rm webapp sh -c "nc -z db 3306"; do
+          while ! docker compose -f docker-compose.ci.yml run --rm --entrypoint "" webapp sh -c "nc -z db 3306"; do
             i=$((i+1))
             if [ $i -ge 24 ]; then
               echo "Database did not become available in time."
@@ -74,16 +81,18 @@ jobs:
           echo ""
           echo "Database is ready!"
       
-      # --- THE DEFINITIVE FIX ---
-      # Use 'docker compose run' which is designed for one-off tasks.
-      # Crucially, use '--entrypoint ""' to bypass the problematic entrypoint script.
-      # This ensures the arguments are passed directly to Python without being mangled.
-      - name: Run Scan via docker compose run (Bypassing Entrypoint)
+      # Step 3: Use 'docker compose run' again for the main CLI task.
+      # This creates another clean, one-off container that connects to the running DB.
+      # The '--entrypoint ""' is CRITICAL and VALID for 'run'. It bypasses
+      # the web server's startup script and passes the arguments directly
+      # and cleanly to Python, resolving the argument mangling.
+      - name: Run Scan (CLI Task)
         env:
           WEBAPP_IMAGE: ${{ env.DOCKER_IMAGE }}:latest
         run: |
           set -o pipefail
-          docker compose -f docker-compose.yml exec -T \
+          docker compose -f docker-compose.ci.yml run --rm \
+            --entrypoint "" \
             -e CI=true \
             -e DATABASE_URL="mysql+pymysql://staging_user:staging_password@db/staging_db" \
             -e OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
@@ -116,5 +125,8 @@ jobs:
 
       # Step 7: Display logs only if a step failed
       - name: Display container logs on failure
+        # We need WEBAPP_IMAGE here for docker compose logs to resolve the service correctly.
+        env:
+          WEBAPP_IMAGE: ${{ env.DOCKER_IMAGE }}:latest
         if: failure()
-        run: docker compose logs
+        run: docker compose -f docker-compose.ci.yml logs
