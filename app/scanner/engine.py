@@ -171,6 +171,7 @@ async def async_run_scan(
             passed_tests = sum(1 for r in test_results if r.status == "PASS")
             score = (passed_tests / total_tests) if total_tests > 0 else 0
             test_run = session.query(TestRun).filter_by(id=run_id).one()
+            test_run.model_name = scan_name
             test_run.overall_score = score
             session.commit()
             print(f"✅ Scan for run_id {run_id} completed. Score: {score:.2%}")
