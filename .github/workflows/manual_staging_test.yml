@@ -30,7 +30,7 @@ jobs:
 
       - name: Create Reports Directory
         run: mkdir -p ./reports_output
-
+        
       - name: Cache Hugging Face models
         uses: actions/cache@v4
         with:
@@ -71,28 +71,33 @@ jobs:
           DOCKER_BUILDKIT: 1
           WEBAPP_IMAGE_OVERRIDE: ${{ env.DOCKER_IMAGE_TAG }}
       
-      - name: Run Scan (CLI Task)
-        env:
-          WEBAPP_IMAGE: ${{ env.DOCKER_IMAGE_TAG }}
+      # Now that we are using the original docker-compose.yml, the 'run' command
+      # will behave exactly like it did in your original successful workflow.
+      - name: Run Scan
         run: |
-          set -o pipefail
-          docker compose -f docker-compose.yml run --rm \
-            --entrypoint "" \
-            # --- NEW: Mount the host directory into the container ---
-            # This makes /app/reports inside the container point to
-            # ./reports_output on the host runner.
-            -v ${{ github.workspace }}/reports_output:/app/reports \
-            -e CI=true \
-            -e DATABASE_URL="mysql+pymysql://staging_user:staging_password@db/staging_db" \
-            -e OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
-            webapp python run_cli.py \
-              --model-name "Staging Test: GPT-3.5-Turbo" \
-              --api-endpoint "https://api.openai.com/v1/chat/completions" \
-              --api-key "${{ secrets.OPENAI_API_KEY }}" \
-              --openai-model "gpt-3.5-turbo" \
-          | tee staging_scan_output.log
-
-
+          bash -c '
+            docker compose run --rm \
+              -e CI=true \
+              -e DATABASE_URL="mysql+pymysql://staging_user:staging_password@db/staging_db" \
+              -e OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
+              webapp python run_cli.py \
+                --model-name "Staging Test: GPT-3.5-Turbo" \
+                --api-endpoint "https://api.openai.com/v1/chat/completions" \
+                --api-key "${{ secrets.OPENAI_API_KEY }}" \
+                --openai-model "gpt-3.5-turbo" \
+            | tee staging_scan_output.log
+          '
+  
+      # Upload the generated report as a build artifact 
+      - name: Upload Scan Report Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          # The name of the artifact bundle that will appear in the GitHub UI
+          name: llm-safety-scan-report
+          # The path on the host runner where the report was saved
+          path: ./reports_output/
+          # How long to keep the artifact (e.g., 7 days)
+          retention-days: 7
 
       # Step 6: Publish the Job Summary from the log file
       - name: Publish Test Summary
