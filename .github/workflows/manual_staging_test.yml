@@ -21,12 +21,15 @@ jobs:
       HF_CACHE_PATH: /home/runner/.cache/huggingface
       # Define a tag for the image we're about to build locally
       DOCKER_IMAGE_TAG: llm-safety-toolkit:ci-${{ github.run_id }}
-      # Define the cache image path using only lowercase letters.
+      # Define the cache image path
       CACHE_IMAGE_PATH: ghcr.io/${{ github.repository_owner }}/llm-safety-toolkit
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Create Reports Directory
+        run: mkdir -p ./reports_output
 
       - name: Cache Hugging Face models
         uses: actions/cache@v4
@@ -68,22 +71,28 @@ jobs:
           DOCKER_BUILDKIT: 1
           WEBAPP_IMAGE_OVERRIDE: ${{ env.DOCKER_IMAGE_TAG }}
       
-      # Now that we are using the original docker-compose.yml, the 'run' command
-      # will behave exactly like it did in your original successful workflow.
-      - name: Run Scan
+      - name: Run Scan (CLI Task)
+        env:
+          WEBAPP_IMAGE: ${{ env.DOCKER_IMAGE_TAG }}
         run: |
-          bash -c '
-            docker compose run --rm \
-              -e CI=true \
-              -e DATABASE_URL="mysql+pymysql://staging_user:staging_password@db/staging_db" \
-              -e OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
-              webapp python run_cli.py \
-                --model-name "Staging Test: GPT-3.5-Turbo" \
-                --api-endpoint "https://api.openai.com/v1/chat/completions" \
-                --api-key "${{ secrets.OPENAI_API_KEY }}" \
-                --openai-model "gpt-3.5-turbo" \
-            | tee staging_scan_output.log
-          '
+          set -o pipefail
+          docker compose -f docker-compose.yml run --rm \
+            --entrypoint "" \
+            # --- NEW: Mount the host directory into the container ---
+            # This makes /app/reports inside the container point to
+            # ./reports_output on the host runner.
+            -v ${{ github.workspace }}/reports_output:/app/reports \
+            -e CI=true \
+            -e DATABASE_URL="mysql+pymysql://staging_user:staging_password@db/staging_db" \
+            -e OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
+            webapp python run_cli.py \
+              --model-name "Staging Test: GPT-3.5-Turbo" \
+              --api-endpoint "https://api.openai.com/v1/chat/completions" \
+              --api-key "${{ secrets.OPENAI_API_KEY }}" \
+              --openai-model "gpt-3.5-turbo" \
+          | tee staging_scan_output.log
+
+
 
       # Step 6: Publish the Job Summary from the log file
       - name: Publish Test Summary

@@ -14,6 +14,7 @@ from .api_utils import async_call_llm_api
 # Import our custom detector from its new local path
 from .detectors.refusal_v2 import RefusalDetectorV2
 from .evaluators import Evaluator
+from .reporting.reporter import ReportGenerator
 
 # --- CORRECTED Detector Mapping ---
 # This now maps to the actual imported class for our custom detector.
@@ -173,6 +174,15 @@ async def async_run_scan(
             test_run.overall_score = score
             session.commit()
             print(f"✅ Scan for run_id {run_id} completed. Score: {score:.2%}")
+
+            # Generate the HTML report
+            print("Generating HTML report...")
+            report_generator = ReportGenerator()
+
+            # Create a report directory if it doesn't exist
+            report_filename = f"reports/scan_report_{run_id}.html"
+            report_generator.generate_html_report(test_run, report_filename)
+            print(f"✅ Report generated at: {report_filename}")
         except Exception as e:
             print(f"❌ Database Error: {e}")
             session.rollback()
