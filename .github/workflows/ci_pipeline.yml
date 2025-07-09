@@ -55,6 +55,7 @@ jobs:
       MYSQL_PASSWORD: ci_password
       MYSQL_DATABASE: ci_db
       MYSQL_ROOT_PASSWORD: ci_root_password
+      HF_CACHE_PATH: /home/runner/.cache/huggingface
       WEBAPP_IMAGE_OVERRIDE: llm-safety-toolkit-ci:ci-${{ github.run_id }}
       CACHE_IMAGE_PATH: ghcr.io/${{ github.repository_owner }}/llm-safety-toolkit-ci
 
