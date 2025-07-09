@@ -19,8 +19,10 @@ jobs:
       MYSQL_ROOT_PASSWORD: staging_root_password
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       HF_CACHE_PATH: /home/runner/.cache/huggingface
-      # We define a tag for the image we're about to build
+      # Define a tag for the image we're about to build locally
       DOCKER_IMAGE_TAG: llm-safety-toolkit:ci-${{ github.run_id }}
+      # Define the cache image path using only lowercase letters.
+      CACHE_IMAGE_PATH: ghcr.io/${{ github.repository_owner }}/llm-safety-toolkit
 
     steps:
       - name: Check out repository
@@ -42,21 +44,18 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
           
-      # This step now builds the image, pushes the cache to GHCR, AND
-      # loads the final image into the local Docker daemon so 'docker compose' can use it.
+      # This step builds the image, pushes the cache to GHCR, AND
+      # loads the final image into the local Docker daemon so docker compose can use it.
       - name: Build and Cache Docker image
         uses: docker/build-push-action@v5
         with:
             context: .
-            # Do NOT push the final image itself, only its cache layers.
             push: false
-            # Load the built image into the local Docker daemon.
             load: true
-            # Tag the image locally so docker-compose can find it.
             tags: ${{ env.DOCKER_IMAGE_TAG }}
-            # Define the cache source and destination
-            cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/llm-safety-toolkit:buildcache
-            cache-to: type=registry,ref=ghcr.io/${{ github.repository }}/llm-safety-toolkit:buildcache,mode=max
+            # Use the lowercase-compliant cache path
+            cache-from: type=registry,ref=${{ env.CACHE_IMAGE_PATH }}:buildcache
+            cache-to: type=registry,ref=${{ env.CACHE_IMAGE_PATH }}:buildcache,mode=max
 
       # We now use the ORIGINAL docker-compose.yml, but we override the 'webapp'
       # service to use the image we just built and loaded.
