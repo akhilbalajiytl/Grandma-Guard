@@ -1,8 +1,14 @@
 #!/usr/bin/env python3
+# pyright: reportMissingImports=false
 import argparse
 import os
 
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv  # pyright: ignore[reportMissingImports]
+except ModuleNotFoundError:
+    raise ModuleNotFoundError(
+        "python-dotenv module is not installed. Install with 'pip install python-dotenv'."
+    )
 
 # --- ROBUST .env LOADING ---
 project_root = os.path.dirname(os.path.abspath(__file__))
@@ -28,7 +34,20 @@ from app.scanner.engine import start_scan_thread
 
 def main():
     parser = argparse.ArgumentParser(description="Run CI/CD Scan for the application")
-    # ... (all argument parsing is fine) ...
+    parser.add_argument(
+        "--model-name", required=True, help="Name of the model for the test run"
+    )
+    parser.add_argument(
+        "--api-endpoint", required=True, help="API endpoint URL for the scan"
+    )
+    parser.add_argument("--api-key", required=True, help="API key for authentication")
+    parser.add_argument(
+        "--openai-model",
+        default="gpt-3.5-turbo",
+        help="OpenAI model name (default: gpt-3.5-turbo)",
+    )
+
+    # Now that the arguments are defined, this will work correctly.
     args = parser.parse_args()
 
     session = db_session()
@@ -45,16 +64,13 @@ def main():
     finally:
         session.close()
 
-    # --- THIS IS THE FIX ---
-    # The background scanner will now connect to the MySQL database
-    # We pass wait=True to ensure the main script doesn't exit prematurely.
     start_scan_thread(
         run_id,
         args.model_name,
         args.api_endpoint,
         args.api_key,
         args.openai_model,
-        wait=True,  # This will block here until the scan is finished.
+        wait=True,
     )
     print("CLI script finished.")
 
