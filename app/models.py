@@ -19,14 +19,13 @@ Base = declarative_base()
 class TestRun(Base):
     __tablename__ = "test_runs"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # Rename the column in the model to match what the code now uses.
     scan_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    # e.g., "openai-gpt-4", "anthropic-claude-3"
+
     timestamp: Mapped[datetime.datetime] = mapped_column(
         DateTime, default=datetime.datetime.utcnow
     )
-    overall_score: Mapped[float] = mapped_column(
-        Float, default=0.0
-    )  # e.g. 8/10 tests passed = 0.8
+    overall_score: Mapped[float] = mapped_column(Float, default=0.0)
     results: Mapped[list["TestResult"]] = relationship(
         "TestResult", back_populates="run", cascade="all, delete-orphan"
     )

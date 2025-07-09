@@ -13,6 +13,14 @@ __pycache__/
 # Personal notes
 notes.txt
 
+# Ignore the local cache directory for Hugging Face models and other data.
+# The slash at the end ensures we only ignore directories named .cache at the root.
+.cache/
+
+# Ignore other common files
+.DS_Store
+*.log
+
 # Local database files
 ci_scan_results.db
 garak_src

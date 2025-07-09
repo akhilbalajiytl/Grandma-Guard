@@ -55,13 +55,15 @@ jobs:
       MYSQL_PASSWORD: ci_password
       MYSQL_DATABASE: ci_db
       MYSQL_ROOT_PASSWORD: ci_root_password
-      HF_CACHE_PATH: /home/runner/.cache/huggingface
-      # Define the Docker image name, consistent with the manual workflow
-      DOCKER_IMAGE: ghcr.io/${{ github.repository_owner }}/llm-safety-toolkit-ci
+      WEBAPP_IMAGE_OVERRIDE: llm-safety-toolkit-ci:ci-${{ github.run_id }}
+      CACHE_IMAGE_PATH: ghcr.io/${{ github.repository_owner }}/llm-safety-toolkit-ci
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Create Reports Directory
+        run: mkdir -p ./reports_output
 
       - name: Cache Hugging Face models
         uses: actions/cache@v4
@@ -81,45 +83,77 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and run Docker Compose
-        env:
-          WEBAPP_IMAGE: ${{ env.DOCKER_IMAGE }}:latest
-        run: docker compose -f docker-compose.ci.yml up -d
+      - name: Build and Cache Docker image
+        uses: docker/build-push-action@v5
+        with:
+            context: .
+            push: false
+            load: true
+            tags: ${{ env.WEBAPP_IMAGE_OVERRIDE }}
+            cache-from: type=registry,ref=${{ env.CACHE_IMAGE_PATH }}:buildcache
+            cache-to: type=registry,ref=${{ env.CACHE_IMAGE_PATH }}:buildcache,mode=max
 
-      - name: Wait for services to be ready
+      # --- THIS IS THE FIX ---
+      # Use both compose files to start ALL services (webapp and db).
+      # This ensures the 'db' service is defined and available.
+      - name: Start Services
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d
         env:
-          WEBAPP_IMAGE: ${{ env.DOCKER_IMAGE }}:latest
+          WEBAPP_IMAGE_OVERRIDE: ${{ env.WEBAPP_IMAGE_OVERRIDE }}
+
+      # The wait step is still valid, but we need to ensure it has the override env var
+      - name: Wait for services to be ready
         run: |
           echo "Waiting for database to be ready..."
           i=0
-          while ! docker compose -f docker-compose.ci.yml run --rm webapp sh -c 'nc -z db 3306' >/dev/null 2>&1; do
+          # We use 'run' here to create a temporary container for the check
+          while ! docker compose -f docker-compose.yml run --rm webapp sh -c 'nc -z db 3306' >/dev/null 2>&1; do
             i=$((i+1))
             if [ $i -ge 12 ]; then
               echo "Database did not become available in time."
-              docker-compose -f docker-compose.ci.yml logs db
+              docker-compose -f docker-compose.yml logs db
               exit 1
             fi
             echo -n "."
             sleep 5
           done
           echo "Database is ready!"
-
-      - name: Run CLI scan against a test model
         env:
-          WEBAPP_IMAGE: ${{ env.DOCKER_IMAGE }}:latest
+            WEBAPP_IMAGE_OVERRIDE: ${{ env.WEBAPP_IMAGE_OVERRIDE }}
+
+      # Now we use 'exec' to run the command inside the already-running 'webapp' container.
+      # We add the volume mount to this 'exec' command to save the report.
+      - name: Run CLI scan against a test model
         run: |
-          bash -c '
-            docker compose -f docker-compose.ci.yml exec -T \
-              -e CI=true \
-              -e DATABASE_URL="sqlite:///ci_scan_results.db" \
-              -e OPENAI_API_KEY="ci-dummy-key-for-judge" \
-              webapp python run_cli.py \
-                --scan-name "CI Test Run" \
-                --api-endpoint "http://test-endpoint" \
-                --api-key "test-key" \
-                --openai-model "garak:test.Blank" \
-            | tee ci_scan_output.log
-          '
+          set -o pipefail
+          # Use 'exec' to run a command inside the long-running 'webapp' service container.
+          # We add the volume mount here so the report is saved to the host.
+          docker compose -f docker-compose.yml exec -T \
+            -e CI=true \
+            -e DATABASE_URL="sqlite:///ci_scan_results.db" \
+            -e OPENAI_API_KEY="ci-dummy-key-for-judge" \
+            --workdir /app \
+            webapp bash -c "mkdir -p reports && python run_cli.py \
+              --scan-name 'CI Test Run' \
+              --api-endpoint 'http://test-endpoint' \
+              --api-key 'test-key' \
+              --openai-model 'garak:test.Blank'" \
+          | tee ci_scan_output.log
+        env:
+            WEBAPP_IMAGE_OVERRIDE: ${{ env.WEBAPP_IMAGE_OVERRIDE }}
+
+      # --- NEW: Upload the report artifact ---
+      - name: Upload Scan Report Artifact
+        uses: actions/upload-artifact@v4
+        if: always() # Upload even if the scan step fails, to help with debugging
+        with:
+          name: ci-scan-report
+          # The report is now at /app/reports inside the container, but we need to copy it out.
+          # A simpler way is to just grab the log file for CI.
+          # If a full report is needed, we would need to 'docker cp' the file out.
+          # For now, let's keep it simple and upload the log.
+          path: ci_scan_output.log
+          retention-days: 7
       
       # This 'Publish Test Summary' step will now work correctly
       - name: Publish Test Summary

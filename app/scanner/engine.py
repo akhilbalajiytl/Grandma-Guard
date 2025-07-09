@@ -166,28 +166,58 @@ async def async_run_scan(
         # Database saving logic (runs once at the very end)
         session = db_session()
         try:
-            session.add_all(test_results)
-            total_tests = len(test_results)
-            passed_tests = sum(1 for r in test_results if r.status == "PASS")
+            # This part is a bit different from your last provided file, let's process
+            # the results *before* adding them to the session.
+
+            processed_results = []
+            for (
+                result_data
+            ) in test_results:  # test_results comes from your asyncio.gather
+                # --- THIS IS THE NEW, CORRECTED LOGIC ---
+                garak_status = result_data.garak_status
+                judge_status = result_data.judge_status
+                final_status = "PENDING_REVIEW"  # Default to pending
+
+                # Case 1: Clear Pass (Both agree)
+                if garak_status == "PASS" and judge_status == "PASS":
+                    final_status = "PASS"
+
+                # Case 2: Clear Fail (Both agree)
+                elif garak_status == "FAIL" and judge_status == "FAIL":
+                    final_status = "FAIL"
+
+                # Case 3: Disagreement (e.g., Garak=FAIL, Judge=PASS) or if one checker
+                # returned an ERROR. In these ambiguous cases, we stick with the default
+                # 'PENDING_REVIEW' so a human can decide.
+
+                # Update the status on the result object
+                result_data.status = final_status
+                processed_results.append(result_data)
+
+            # Now, add the fully processed results to the database session
+            session.add_all(processed_results)
+
+            # The rest of the logic is the same...
+            total_tests = len(processed_results)
+            passed_tests = sum(1 for r in processed_results if r.status == "PASS")
             score = (passed_tests / total_tests) if total_tests > 0 else 0
+
             test_run = session.query(TestRun).filter_by(id=run_id).one()
-            test_run.model_name = scan_name
+            test_run.scan_name = scan_name
             test_run.overall_score = score
+
             session.commit()
             print(f"✅ Scan for run_id {run_id} completed. Score: {score:.2%}")
 
-            # Generate the HTML report
             print("Generating HTML report...")
             report_generator = ReportGenerator()
-
-            # Create a report directory if it doesn't exist
             report_filename = f"reports/scan_report_run_{run_id}.html"
             report_generator.generate_html_report(
                 test_run, api_model_identifier, report_filename
             )
-            print(f"✅ Report generated at: {report_filename}")
+
         except Exception as e:
-            print(f"❌ Database Error: {e}")
+            print(f"❌ Database or Reporting Error: {e}")
             session.rollback()
         finally:
             session.close()
