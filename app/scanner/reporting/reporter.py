@@ -1,4 +1,3 @@
-import json
 import os
 
 from jinja2 import Environment, FileSystemLoader
@@ -16,7 +15,6 @@ class ReportGenerator:
         """
         # Set up Jinja2 environment
         self.env = Environment(loader=FileSystemLoader(template_dir))
-        self.env.filters["tojson"] = json.dumps
         self.template = self.env.get_template("report_template.html")
 
     def generate_html_report(
