@@ -12,7 +12,7 @@ async function loadRunDetails(runId) {
     const response = await fetch(`/api/results/${runId}`);
     const data = await response.json();
 
-    document.getElementById('current-model-name').innerText = `Results for: ${data.model_name}`;
+    document.getElementById('current-model-name').innerText = `Results for: ${data.scan_name}`;
 
     const ctx = document.getElementById('owasp-chart').getContext('2d');
     if (myChart) {

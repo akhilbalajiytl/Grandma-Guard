@@ -50,7 +50,7 @@ def main():
 
     session = db_session()
     try:
-        new_run = TestRun(model_name=args.model_name)
+        new_run = TestRun(scan_name=args.scan_name)
         session.add(new_run)
         session.commit()
         run_id = new_run.id
@@ -64,7 +64,7 @@ def main():
 
     start_scan_thread(
         run_id,
-        args.model_name,
+        args.scan_name,
         args.api_endpoint,
         args.api_key,
         args.openai_model,

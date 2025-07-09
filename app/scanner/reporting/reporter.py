@@ -33,7 +33,7 @@ class ReportGenerator:
         pending_count = sum(1 for r in test_run.results if r.status == "PENDING_REVIEW")
 
         context = {
-            "scan_name": test_run.model_name,  # Using the correct name now
+            "scan_name": test_run.scan_name,  # Using the correct name now
             "model_identifier": model_identifier,  # <-- NEW
             "timestamp": test_run.timestamp.strftime("%Y-%m-%d %H:%M:%S UTC"),
             "overall_score": test_run.overall_score,
