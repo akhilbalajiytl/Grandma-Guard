@@ -79,7 +79,7 @@ jobs:
                 --model-name "Staging Test: GPT-3.5-Turbo" \
                 --api-endpoint "https://api.openai.com/v1/chat/completions" \
                 --api-key "${{ secrets.OPENAI_API_KEY }}" \
-                --openai-model "gpt-3.5-turbo" \
+                --openai-model "gpt-4o-mini" \
             | tee staging_scan_output.log
           '
   
