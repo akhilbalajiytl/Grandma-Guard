@@ -60,11 +60,7 @@ jobs:
       # We now use the ORIGINAL docker-compose.yml, but we override the 'webapp'
       # service to use the image we just built and loaded.
       - name: Start Services
-        run: |
-          docker compose -f docker-compose.yml up \
-            --build \
-            --no-build webapp \
-            -d
+        run: docker compose -f docker-compose.yml up -d
         env:
           # This tells 'docker compose' to use our pre-built image for the 'webapp' service.
           # It will still "build" the other services if needed, but not webapp.
