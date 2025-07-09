@@ -1,54 +1,27 @@
 # docker-compose.ci.yml
-# This version is for CI and expects a pre-built image.
-
-networks:
-  llm_toolkit_net:
-    driver: bridge
+# This file defines services specifically for CI tasks.
 
 services:
-  webapp:
-    # --- THIS IS THE KEY CHANGE ---
-    # Instead of 'build: .', we use 'image:' and a variable.
-    image: ${WEBAPP_IMAGE}
-    ports:
-      - "5001:5000"
+  # We define a new service called 'scan' for our one-off scan task.
+  scan:
+    # This tells the 'scan' service to use the exact same image and build
+    # context as the 'webapp' service defined in the main docker-compose.yml.
+    # We use an environment variable to specify the pre-built image tag.
+    image: ${WEBAPP_IMAGE_OVERRIDE}
+    build:
+      context: .
+
+    # --- THIS IS THE CRITICAL FIX ---
+    # We declaratively add the volume mount here. This is robust and reliable.
+    # It mounts the 'reports' directory from the host into the container.
     volumes:
+      - ./reports_output:/app/reports
+
+      # We still need the app code mounted so the container can find run_cli.py
+      # (These are inherited from the main 'webapp' service but it's good to be explicit)
       - ./app:/app/app
-      - ./wsgi.py:/app/wsgi.py
       - ./run_cli.py:/app/run_cli.py
-      - ${HF_CACHE_PATH}:/root/.cache/huggingface
-    environment:
-      - DATABASE_URL=mysql+pymysql://${MYSQL_USER}:${MYSQL_PASSWORD}@db/${MYSQL_DATABASE}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+
+    # This service depends on the 'db' service from the main compose file.
     depends_on:
-      db:
-        condition: service_healthy
-    restart: always
-    networks:
-      - llm_toolkit_net
-
-  db:
-    # DB service remains exactly the same
-    image: mysql:8.0
-    command: --default-authentication-plugin=mysql_native_password
-    ports:
-      - "3307:3306"
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${MYSQL_DATABASE}
-      MYSQL_USER: ${MYSQL_USER}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
-    healthcheck:
-      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "${MYSQL_USER}", "-p${MYSQL_PASSWORD}" ]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 30s
-    volumes:
-      - mysql_data:/var/lib/mysql
-    restart: always
-    networks:
-      - llm_toolkit_net
-
-volumes:
-  mysql_data:
+      - db

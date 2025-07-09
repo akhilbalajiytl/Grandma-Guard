@@ -20,7 +20,7 @@ jobs:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       HF_CACHE_PATH: /home/runner/.cache/huggingface
       # Define a tag for the image we're about to build locally
-      DOCKER_IMAGE_TAG: llm-safety-toolkit:ci-${{ github.run_id }}
+      WEBAPP_IMAGE_OVERRIDE: llm-safety-toolkit:ci-${{ github.run_id }}
       # Define the cache image path
       CACHE_IMAGE_PATH: ghcr.io/${{ github.repository_owner }}/llm-safety-toolkit
 
@@ -60,23 +60,18 @@ jobs:
             cache-from: type=registry,ref=${{ env.CACHE_IMAGE_PATH }}:buildcache
             cache-to: type=registry,ref=${{ env.CACHE_IMAGE_PATH }}:buildcache,mode=max
 
-      # We now use the ORIGINAL docker-compose.yml, but we override the 'webapp'
-      # service to use the image we just built and loaded.
-      - name: Start Services
-        run: docker compose -f docker-compose.yml up -d
+      - name: Start Database Service
+        # We start the 'db' from the main compose file.
+        run: docker compose -f docker-compose.yml up -d db
         env:
-          # This tells 'docker compose' to use our pre-built image for the 'webapp' service.
-          # It will still "build" the other services if needed, but not webapp.
-          COMPOSE_DOCKER_CLI_BUILD: 1
-          DOCKER_BUILDKIT: 1
-          WEBAPP_IMAGE_OVERRIDE: ${{ env.DOCKER_IMAGE_TAG }}
+          WEBAPP_IMAGE_OVERRIDE: ${{ env.WEBAPP_IMAGE_OVERRIDE }}
       
       # Now that we are using the original docker-compose.yml, the 'run' command
       # will behave exactly like it did in your original successful workflow.
       - name: Run Scan
         run: |
           bash -c '
-            docker compose run --rm \
+            docker compose -f docker-compose.yml -f docker-compose.ci.yml run --rm \
               -e CI=true \
               -e DATABASE_URL="mysql+pymysql://staging_user:staging_password@db/staging_db" \
               -e OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
