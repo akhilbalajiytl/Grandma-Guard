@@ -19,7 +19,7 @@ Base = declarative_base()
 class TestRun(Base):
     __tablename__ = "test_runs"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    model_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    scan_name: Mapped[str] = mapped_column(String(255), nullable=False)
     # e.g., "openai-gpt-4", "anthropic-claude-3"
     timestamp: Mapped[datetime.datetime] = mapped_column(
         DateTime, default=datetime.datetime.utcnow

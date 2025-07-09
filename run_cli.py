@@ -34,9 +34,7 @@ from app.scanner.engine import start_scan_thread
 
 def main():
     parser = argparse.ArgumentParser(description="Run CI/CD Scan for the application")
-    parser.add_argument(
-        "--model-name", required=True, help="Name of the model for the test run"
-    )
+    parser.add_argument("--scan-name", required=True, help="Name of the test run")
     parser.add_argument(
         "--api-endpoint", required=True, help="API endpoint URL for the scan"
     )

@@ -46,7 +46,7 @@ function renderRunColumn(container, data, runId) { // Added runId parameter
 
     // --- Create the HTML for the column ---
     let html = `
-        <h2>${escapeHtml(data.model_name)}</h2>
+        <h2>${escapeHtml(data.scan_name)}</h2>
         <div class="summary-card">
             <h3>Run Summary</h3>
             <ul>

@@ -114,7 +114,7 @@ jobs:
               -e DATABASE_URL="sqlite:///ci_scan_results.db" \
               -e OPENAI_API_KEY="ci-dummy-key-for-judge" \
               webapp python run_cli.py \
-                --model-name "CI Test Run" \
+                --scan-name "CI Test Run" \
                 --api-endpoint "http://test-endpoint" \
                 --api-key "test-key" \
                 --openai-model "garak:test.Blank" \

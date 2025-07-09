@@ -12,8 +12,8 @@
     <div class="sidebar">
         <h2>New Scan</h2>
         <form action="/run" method="POST">
-            <label for="model_name">Test Run Name:</label>
-            <input type="text" id="model_name" name="model_name" value="GPT-4o Test" required>
+            <label for="scan_name">Test Run Name:</label>
+            <input type="text" id="scan_name" name="scan_name" value="GPT-4o Test" required>
             <label for="api_model_identifier">Model Identifier:</label>
             <input type="text" id="api_model_identifier" name="api_model_identifier" value="gpt-4o" required>
             <label for="api_endpoint">API Endpoint:</label>
@@ -29,7 +29,7 @@
             {% for run in runs %}
             <!-- THIS IS THE CRITICAL LINE TO CHECK -->
             <div class="run-item" data-run-id="{{ run.id }}" onclick="loadRunDetails({{ run.id }})">
-                {{ run.model_name }} ({{ run.timestamp.strftime('%Y-%m-%d %H:%M') }})
+                {{ run.scan_name }} ({{ run.timestamp.strftime('%Y-%m-%d %H:%M') }})
             </div>
             {% endfor %}
         </div>

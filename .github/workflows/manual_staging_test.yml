@@ -76,7 +76,7 @@ jobs:
               -e DATABASE_URL="mysql+pymysql://staging_user:staging_password@db/staging_db" \
               -e OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
               scan python run_cli.py \
-                --model-name "Staging Test: GPT-3.5-Turbo" \
+                --scan-name "Staging Test: GPT-4o-Mini" \
                 --api-endpoint "https://api.openai.com/v1/chat/completions" \
                 --api-key "${{ secrets.OPENAI_API_KEY }}" \
                 --openai-model "gpt-4o-mini" \

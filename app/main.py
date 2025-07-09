@@ -19,23 +19,23 @@ def index():
 
 @app.route("/run", methods=["POST"])
 def run_new_scan():
-    model_name = request.form["model_name"]
+    scan_name = request.form["scan_name"]
     api_model_identifier = request.form["api_model_identifier"]
     api_endpoint = request.form["api_endpoint"]
 
     # GET THE KEY FROM THE WEB FORM
     api_key = request.form["api_key"]
 
-    if not all([model_name, api_model_identifier, api_endpoint, api_key]):
+    if not all([scan_name, api_model_identifier, api_endpoint, api_key]):
         return "Error: All fields are required.", 400
 
-    new_run = TestRun(model_name=model_name)
+    new_run = TestRun(scan_name=scan_name)
     db_session.add(new_run)
     db_session.commit()
 
     # Pass the key from the form to the scanner
     start_scan_thread(
-        new_run.id, model_name, api_endpoint, api_key, api_model_identifier
+        new_run.id, scan_name, api_endpoint, api_key, api_model_identifier
     )
 
     return redirect(url_for("index"))
@@ -107,7 +107,7 @@ def api_results(run_id):
 
     return jsonify(
         {
-            "model_name": run.model_name,
+            "scan_name": run.scan_name,
             "overall_score": run.overall_score,
             "chart_data": chart_data,
             "detailed_results": detailed_results,
@@ -189,6 +189,6 @@ def export_csv(run_id):
         csv_output,
         mimetype="text/csv",
         headers={
-            "Content-disposition": f"attachment; filename=run_{run_id}_{run.model_name}.csv"
+            "Content-disposition": f"attachment; filename=run_{run_id}_{run.scan_name}.csv"
         },
     )

@@ -4,10 +4,6 @@
 services:
   # We define a new service called 'scan' for our one-off scan task.
   scan:
-    # This tells the 'scan' service to use the exact same image and build
-    # context as the 'webapp' service defined in the main docker-compose.yml.
-    # We use an environment variable to specify the pre-built image tag.
-    image: ${WEBAPP_IMAGE_OVERRIDE}
     build:
       context: .
 

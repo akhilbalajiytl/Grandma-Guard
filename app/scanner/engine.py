@@ -121,7 +121,7 @@ async def process_single_prompt(
 
 
 async def async_run_scan(
-    run_id, model_name, api_endpoint, api_key, api_model_identifier
+    run_id, scan_name, api_endpoint, api_key, api_model_identifier
 ):
     """The new async main scanner function."""
     with app.app_context():
@@ -180,8 +180,10 @@ async def async_run_scan(
             report_generator = ReportGenerator()
 
             # Create a report directory if it doesn't exist
-            report_filename = f"reports/scan_report_{run_id}.html"
-            report_generator.generate_html_report(test_run, report_filename)
+            report_filename = f"reports/scan_report_run_{run_id}.html"
+            report_generator.generate_html_report(
+                test_run, api_model_identifier, report_filename
+            )
             print(f"✅ Report generated at: {report_filename}")
         except Exception as e:
             print(f"❌ Database Error: {e}")
@@ -190,15 +192,15 @@ async def async_run_scan(
             session.close()
 
 
-def run_scan(run_id, model_name, api_endpoint, api_key, api_model_identifier):
+def run_scan(run_id, scan_name, api_endpoint, api_key, api_model_identifier):
     """This function now just kicks off the async event loop."""
     asyncio.run(
-        async_run_scan(run_id, model_name, api_endpoint, api_key, api_model_identifier)
+        async_run_scan(run_id, scan_name, api_endpoint, api_key, api_model_identifier)
     )
 
 
 def start_scan_thread(
-    run_id, model_name, api_endpoint, api_key, api_model_identifier, wait=False
+    run_id, scan_name, api_endpoint, api_key, api_model_identifier, wait=False
 ):
     """
     Starts the scan in a background thread.
@@ -211,7 +213,7 @@ def start_scan_thread(
     """
     scan_thread = threading.Thread(
         target=run_scan,
-        args=(run_id, model_name, api_endpoint, api_key, api_model_identifier),
+        args=(run_id, scan_name, api_endpoint, api_key, api_model_identifier),
     )
     scan_thread.start()
 

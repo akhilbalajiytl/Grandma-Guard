@@ -22,7 +22,7 @@
                 <select id="runA" onchange="loadComparison()">
                     <option value="">-- Select a Run --</option>
                     {% for run in runs %}
-                    <option value="{{ run.id }}">{{ run.model_name }} ({{ run.timestamp.strftime('%Y-%m-%d %H:%M') }})</option>
+                    <option value="{{ run.id }}">{{ run.scan_name }} ({{ run.timestamp.strftime('%Y-%m-%d %H:%M') }})</option>
                     {% endfor %}
                 </select>
             </div>
@@ -31,7 +31,7 @@
                 <select id="runB" onchange="loadComparison()">
                     <option value="">-- Select a Run --</option>
                     {% for run in runs %}
-                    <option value="{{ run.id }}">{{ run.model_name }} ({{ run.timestamp.strftime('%Y-%m-%d %H:%M') }})</option>
+                    <option value="{{ run.id }}">{{ run.scan_name }} ({{ run.timestamp.strftime('%Y-%m-%d %H:%M') }})</option>
                     {% endfor %}
                 </select>
             </div>
