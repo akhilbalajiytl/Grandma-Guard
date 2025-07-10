@@ -37,6 +37,7 @@
     <div class="main-content">
         <div style="display: flex; justify-content: space-between; align-items: center;">
         <h1>Dashboard</h1>
+        <a href="{{ url_for('runtime_logs_page') }}" class="back-link" style="margin-right: 20px;">Runtime Logs →</a>
         <a href="{{ url_for('compare_page') }}" class="back-link">Compare Runs →</a>
         </div>
         <h2 id="current-model-name">Select a run to view details</h2>

@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Runtime Security Logs - LLM Safety Toolkit</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+</head>
+<body>
+    <div class="main-content" style="max-width: 1600px; margin: 0 auto;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h1>Runtime Security Event Logs</h1>
+            <a href="{{ url_for('index') }}" class="back-link">← Back to Dashboard</a>
+        </div>
+        <h3>Showing last 100 events. Newest first.</h3>
+        <table id="results-table">
+            <thead>
+                <tr>
+                    <th>Timestamp</th>
+                    <th>Decision</th>
+                    <th>Garak</th>
+                    <th>Judge</th>
+                    <th>Prompt</th>
+                    <th>Original Response</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in logs %}
+                <tr style="background-color: {{ '#f8d7da' if log.decision == 'BLOCKED' else 'transparent' }};">
+                    <td style="white-space: nowrap;">{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                    <td style="font-weight: bold;">{{ log.decision }}</td>
+                    <td>{{ log.garak_status }}</td>
+                    <td>{{ log.judge_status }}</td>
+                    <td><pre>{{ log.user_prompt }}</pre></td>
+                    <td><pre>{{ log.llm_response }}</pre></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

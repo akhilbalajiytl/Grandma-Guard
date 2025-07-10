@@ -55,4 +55,6 @@ COPY . .
 COPY . .
 RUN chmod +x /app/entrypoint.sh
 ENTRYPOINT ["/app/entrypoint.sh"]
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "wsgi:app"]
+# Point Gunicorn to the new 'asgi.py' file. The 'app' variable inside that
+# file is the ASGI-compatible, wrapped version of your Flask application.
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "-k", "uvicorn.workers.UvicornWorker", "asgi:app"]

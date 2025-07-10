@@ -1,9 +1,9 @@
 # wsgi.py
-# This file is the entry point for the Gunicorn server.
+# This file is the entry point for running the application in local
+# development mode (e.g., python wsgi.py).
 
 from app import app
 
 if __name__ == "__main__":
-    # This allows running the app directly with `python wsgi.py` for development
-    # Note: Use Gunicorn for production, as configured in the Dockerfile
+    # Call .run() on the original Flask 'app' object.
     app.run(host="0.0.0.0", port=5000, debug=True)

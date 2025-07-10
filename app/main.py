@@ -1,4 +1,6 @@
 # app/main.py
+import os
+
 import pandas as pd
 from flask import Response, jsonify, redirect, render_template, request, url_for
 
@@ -6,8 +8,9 @@ from flask import Response, jsonify, redirect, render_template, request, url_for
 from . import app, db_session
 
 # In app/main.py
-from .models import TestResult, TestRun
+from .models import RuntimeLog, TestResult, TestRun
 from .scanner.engine import start_scan_thread
+from .scanner.runtime_scanner import scan_and_respond_in_realtime
 
 
 # --- Routes ---
@@ -47,7 +50,6 @@ def api_results(run_id):
     if not run:
         return jsonify({"error": "Run not found"}), 404
 
-    # --- NEW, ROBUST CHARTING LOGIC ---
     results_by_owasp = {}
     # Define all possible statuses we want to count for the chart
     valid_chart_statuses = ["PASS", "FAIL", "ERROR", "PENDING_REVIEW"]
@@ -89,7 +91,6 @@ def api_results(run_id):
         ],
     }
 
-    # --- THIS IS THE API FIX ---
     # Add 'garak_status' to the detailed results payload
     detailed_results = [
         {
@@ -192,3 +193,76 @@ def export_csv(run_id):
             "Content-disposition": f"attachment; filename=run_{run_id}_{run.scan_name}.csv"
         },
     )
+
+
+# --- THE LLM FIREWALL/PROXY ENDPOINT ---
+@app.route("/proxy/v1/chat/completions", methods=["POST"])
+async def proxy_chat_completions():
+    """
+    This endpoint acts as a drop-in replacement for the OpenAI API.
+    It intercepts the request, scans it, and then returns a response.
+    """
+    request_data = request.get_json()
+    if not request_data or "messages" not in request_data:
+        return jsonify({"error": "Invalid request body"}), 400
+
+    # Extract the user's prompt
+    user_prompt = ""
+    for message in request_data["messages"]:
+        if message.get("role") == "user":
+            user_prompt = message.get("content")
+            break
+
+    if not user_prompt:
+        return jsonify({"error": "No user prompt found"}), 400
+
+    # For now, I am using environment variables for the target LLM.
+    model_config = {
+        "api_endpoint": os.getenv(
+            "TARGET_API_ENDPOINT", "https://api.openai.com/v1/chat/completions"
+        ),
+        "api_key": os.getenv("TARGET_LLM_API_KEY"),
+        "model_identifier": request_data.get(
+            "model", "gpt-3.5-turbo"
+        ),  # Use model from request or a default
+    }
+
+    if not model_config["api_key"]:
+        return jsonify({"error": "TARGET_LLM_API_KEY not configured on server"}), 500
+
+    # Call our runtime scanner to do the work
+    final_response_content = await scan_and_respond_in_realtime(
+        user_prompt, model_config
+    )
+
+    # Return the response in a format that mimics the OpenAI API
+    return jsonify(
+        {
+            "id": "chatcmpl-proxy-123",
+            "object": "chat.completion",
+            "created": int(os.path.getmtime(os.path.abspath(os.path.curdir))),
+            "model": model_config["model_identifier"],
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": final_response_content,
+                    },
+                    "finish_reason": "stop",
+                }
+            ],
+        }
+    )
+
+
+# --- NEW: A simple page to view the runtime logs ---
+@app.route("/runtime-logs")
+def runtime_logs_page():
+    logs = (
+        db_session.query(RuntimeLog)
+        .order_by(RuntimeLog.timestamp.desc())
+        .limit(100)
+        .all()
+    )
+    return render_template("runtime_logs.html", logs=logs)

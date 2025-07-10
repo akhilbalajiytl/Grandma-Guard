@@ -1,32 +1,31 @@
 # .dockerignore
 
-# Python virtual environments
-.venv/
-venv/
-garak311/
+# Ignore the virtual environment
+.venv
+venv
+garak311
+*.venv
 
-# Git folder
-.git/
-.github/
-
-# Python cache
-__pycache__/
-
-# Secrets file
-.env
-
-# Local database files
-ci_scan_results.db
-
-# VS Code settings
-.vscode/
-
-# Local build artifacts
+# Ignore Python bytecode and cache
+__pycache__
 *.pyc
 *.pyo
 *.pyd
 
-# Any local log or output files
+# Ignore the local Hugging Face model cache
+.cache/
+
+# Ignore Git directory
+.git
+.gitignore
+
+# Ignore VS Code settings
+.vscode/
+
+# Ignore environment files
+.env
+
+# Ignore build artifacts and logs
 *.log
-*.html
-*.csv
+reports/
+reports_output/
