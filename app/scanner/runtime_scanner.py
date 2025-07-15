@@ -1,20 +1,16 @@
 # app/scanner/runtime_scanner.py
 from .. import app, db_session
 from ..models import RuntimeLog
+from ..tasks import run_forensic_analysis
 from .api_utils import call_llm_api
-from .engine import get_garak_detector_config, run_garak_evaluation_locally
-from .evaluators import Evaluator
+from .policy_engine import PolicyEngine
+from .triage_orchestrator import get_triage_orchestrator
 
-# This can be configured via environment variables in a real system
 BLOCKED_RESPONSE_MESSAGE = "I'm sorry, but I cannot fulfill that request."
 
 
 async def scan_and_respond_in_realtime(prompt: str, model_config: dict):
-    """
-    This is the core function for the LLM Firewall.
-    It takes a prompt, gets a response, scans it, logs it, and decides what to return.
-    """
-    # 1. Call the actual LLM to get a response
+    # 1. Call the LLM
     response = call_llm_api(
         model_config["api_endpoint"],
         model_config["api_key"],
@@ -22,47 +18,32 @@ async def scan_and_respond_in_realtime(prompt: str, model_config: dict):
         model_config["model_identifier"],
     )
 
-    # 2. Evaluate the response in real-time
-    evaluator = Evaluator()
-    # For a simple firewall, we can just use the 'default' refusal detector
-    # A more advanced version could parse the prompt for keywords to pick a detector
-    detector_to_run = get_garak_detector_config("default")
+    # Get the orchestrator instance and then analyze
+    triage_orchestrator = get_triage_orchestrator()
+    triage_profile = triage_orchestrator.analyze(prompt, response)
 
-    garak_status = run_garak_evaluation_locally(detector_to_run, prompt, response)
-    judge_status = evaluator._run_judge_check(prompt, response)
+    # 3. Make a real-time decision
+    decision = PolicyEngine.decide(prompt, triage_profile)  # Pass the prompt in
+    final_response = response if decision == "ALLOWED" else BLOCKED_RESPONSE_MESSAGE
 
-    # 3. Make a decision
-    decision = "ALLOWED"
-    final_response = response
-
-    # If any checker flags the response, block it.
-    if garak_status == "FAIL" or judge_status == "FAIL":
-        decision = "BLOCKED"
-        final_response = BLOCKED_RESPONSE_MESSAGE
-        print(
-            f"🚨 RUNTIME BLOCK: Prompt triggered a {garak_status}/{judge_status} status."
-        )
-
-    # 4. Log the event to the database
-    # We use app_context to ensure the database session works correctly in this async context
+    # 4. Log the initial event to the DB
     with app.app_context():
         log_entry = RuntimeLog(
             user_prompt=prompt,
-            llm_response=response,  # Log the original response, even if blocked
-            garak_status=garak_status,
-            judge_status=judge_status,
+            llm_response=response,
+            triage_risk_profile=triage_profile,
             decision=decision,
             model_identifier=model_config["model_identifier"],
+            forensic_status="PENDING",
         )
         session = db_session()
-        try:
-            session.add(log_entry)
-            session.commit()
-        except Exception as e:
-            print(f"❌ Runtime Log DB Error: {e}")
-            session.rollback()
-        finally:
-            session.close()
+        session.add(log_entry)
+        session.commit()
+        log_id = log_entry.id
+        session.close()
 
-    # 5. Return the final response (either the real one or the blocked message)
+    # 5. Kick off the slow forensic analysis in the background
+    run_forensic_analysis.send(log_id)
+
+    # 6. Return the response to the user immediately
     return final_response

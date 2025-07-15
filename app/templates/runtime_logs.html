@@ -4,34 +4,64 @@
     <meta charset="UTF-8">
     <title>Runtime Security Logs - LLM Safety Toolkit</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    <style>
+        .risk-list { margin:0; padding-left: 15px; font-size: 0.9em; list-style-type: none; }
+        .risk-list li.high-risk { color: #c0392b; font-weight: bold; }
+        .status-tag { padding: 3px 8px; border-radius: 5px; font-size: 0.8em; font-weight: bold; color: #fff; }
+        .status-PENDING { background-color: #f1c40f; }
+        .status-RUNNING { background-color: #3498db; }
+        .status-COMPLETE { background-color: #2ecc71; }
+        .status-ERROR { background-color: #e74c3c; }
+    </style>
 </head>
 <body>
-    <div class="main-content" style="max-width: 1600px; margin: 0 auto;">
+    <div class="main-content" style="max-width: 1800px; margin: 0 auto;">
         <div style="display: flex; justify-content: space-between; align-items: center;">
             <h1>Runtime Security Event Logs</h1>
             <a href="{{ url_for('index') }}" class="back-link">← Back to Dashboard</a>
         </div>
-        <h3>Showing last 100 events. Newest first.</h3>
+        <h3>Showing last 100 events. Newest first. (Page does not auto-refresh)</h3>
         <table id="results-table">
             <thead>
                 <tr>
                     <th>Timestamp</th>
                     <th>Decision</th>
-                    <th>Garak</th>
-                    <th>Judge</th>
-                    <th>Prompt</th>
-                    <th>Original Response</th>
+                    <th>Triage Risks</th>
+                    <th>Forensic Scan</th>
+                    <th>Forensic Risks</th>
+                    <th>Prompt & Response</th>
                 </tr>
             </thead>
             <tbody>
                 {% for log in logs %}
-                <tr style="background-color: {{ '#f8d7da' if log.decision == 'BLOCKED' else 'transparent' }};">
+                <tr style="background-color: {{ '#8B0000' if log.decision == 'BLOCKED' else 'transparent' }};">
                     <td style="white-space: nowrap;">{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
                     <td style="font-weight: bold;">{{ log.decision }}</td>
-                    <td>{{ log.garak_status }}</td>
-                    <td>{{ log.judge_status }}</td>
-                    <td><pre>{{ log.user_prompt }}</pre></td>
-                    <td><pre>{{ log.llm_response }}</pre></td>
+                    <td>
+                        {% if log.triage_risk_profile %}
+                            <ul class="risk-list">
+                            {% for risk, score in log.triage_risk_profile.items() %}
+                                <li class="{{ 'high-risk' if score > 0.5 else '' }}">{{ risk }}: {{ "%.2f"|format(score) }}</li>
+                            {% endfor %}
+                            </ul>
+                        {% endif %}
+                    </td>
+                    <td><span class="status-tag status-{{ log.forensic_status }}">{{ log.forensic_status }}</span></td>
+                    <td>
+                        {% if log.forensic_risk_profile %}
+                            <ul class="risk-list">
+                            {% for risk, score in log.forensic_risk_profile.items() %}
+                                 <li class="{{ 'high-risk' if score > 0.5 else '' }}">{{ risk }}: {{ "%.2f"|format(score) }}</li>
+                            {% endfor %}
+                            </ul>
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td>
+                        <strong>Prompt:</strong><pre>{{ log.user_prompt }}</pre>
+                        <strong>Response:</strong><pre>{{ log.llm_response }}</pre>
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>

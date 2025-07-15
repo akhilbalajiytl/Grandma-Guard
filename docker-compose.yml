@@ -33,6 +33,7 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - TARGET_API_ENDPOINT=${TARGET_API_ENDPOINT}
       - TARGET_LLM_API_KEY=${TARGET_LLM_API_KEY}
+      - NIM_API_KEY=${NIM_API_KEY}
 
     depends_on:
       db:
@@ -69,5 +70,29 @@ services:
     networks:
       - llm_toolkit_net
 
+  redis:
+    image: "redis:alpine"
+    ports:
+      - "6379:6379"
+    networks:
+      - llm_toolkit_net
+
+  worker:
+    image: ${WEBAPP_IMAGE_OVERRIDE:-}
+    build:
+      context: .
+    command: dramatiq --threads 2 app.tasks
+    volumes:
+      - ./app:/app/app
+      - ./run_cli.py:/app/run_cli.py
+    environment:
+      - DATABASE_URL=mysql+pymysql://${MYSQL_USER}:${MYSQL_PASSWORD}@db/${MYSQL_DATABASE}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - NIM_API_KEY=${NIM_API_KEY}
+    depends_on:
+      - redis
+      - db
+    networks:
+      - llm_toolkit_net
 volumes:
   mysql_data:

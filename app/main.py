@@ -218,9 +218,7 @@ async def proxy_chat_completions():
 
     # For now, I am using environment variables for the target LLM.
     model_config = {
-        "api_endpoint": os.getenv(
-            "TARGET_API_ENDPOINT", "https://api.openai.com/v1/chat/completions"
-        ),
+        "api_endpoint": os.getenv("TARGET_API_ENDPOINT"),
         "api_key": os.getenv("TARGET_LLM_API_KEY"),
         "model_identifier": request_data.get(
             "model", "gpt-3.5-turbo"

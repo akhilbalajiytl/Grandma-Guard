@@ -2,7 +2,9 @@
 import datetime
 
 from sqlalchemy import (
+    JSON,
     DateTime,
+    Enum,
     Float,
     ForeignKey,
     Integer,
@@ -77,13 +79,14 @@ class RuntimeLog(Base):
     llm_response: Mapped[str] = mapped_column(Text, nullable=False)
 
     # The outcome of our real-time scan
-    garak_status: Mapped[str | None] = mapped_column(String(50))
-    judge_status: Mapped[str | None] = mapped_column(String(50))
-
-    # The final decision made by the firewall
-    decision: Mapped[str] = mapped_column(
-        String(50), nullable=False
-    )  # e.g., "ALLOWED", "BLOCKED"
-
-    # The model that was called
+    triage_risk_profile: Mapped[dict | None] = mapped_column(JSON)
+    decision: Mapped[str] = mapped_column(String(50), nullable=False)
     model_identifier: Mapped[str] = mapped_column(String(255))
+
+    # --- NEW: Fields for the SLOW, ASYNCHRONOUS deep scan ---
+    forensic_status: Mapped[str] = mapped_column(
+        Enum("PENDING", "RUNNING", "COMPLETE", "ERROR", name="forensic_status_enum"),
+        default="PENDING",
+        nullable=False,
+    )
+    forensic_risk_profile: Mapped[dict | None] = mapped_column(JSON)
