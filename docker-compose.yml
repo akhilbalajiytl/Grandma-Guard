@@ -54,7 +54,6 @@ services:
       MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
 
-    # --- THIS IS THE FIX (Part 1) ---
     # Add a health check to the database service.
     healthcheck:
       # This command repeatedly tries to connect to the database.

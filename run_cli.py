@@ -15,16 +15,31 @@ project_root = os.path.dirname(os.path.abspath(__file__))
 dotenv_path = os.path.join(project_root, ".env")
 load_dotenv(dotenv_path=dotenv_path, override=True)
 
-# For CI, we use a temporary SQLite DB. For local, we use DATABASE_URL_LOCAL.
+# For CI, we use a temporary SQLite DB. For local, we use DATABASE_URL_HOST.
 is_ci = os.getenv("CI") == "true"
 if is_ci:
     os.environ["DATABASE_URL"] = "sqlite:///ci_scan_results.db"
 else:
-    # For local CLI runs, connect to the Docker MySQL database
-    if "DATABASE_URL_LOCAL" not in os.environ:
-        print("Error: DATABASE_URL_LOCAL not found in your .env file for local run.")
+    if "DATABASE_URL_HOST" not in os.environ:
+        print("Error: DATABASE_URL_HOST not found in your .env file for local run.")
         exit(1)
-    os.environ["DATABASE_URL"] = os.environ["DATABASE_URL_LOCAL"]
+    os.environ["DATABASE_URL"] = os.environ["DATABASE_URL_HOST"]
+
+
+# --- THIS IS THE FIX ---
+# Since the CLI is a separate entry point, it must initialize its own dependencies.
+# We do this *before* importing any other app modules that might need them.
+print("CLI Mode: Initializing Garak models...")
+try:
+    from app.scanner.garak_loader import _load_dependencies
+
+    _load_dependencies()
+    print("✅ Garak models initialized for CLI run.")
+except Exception as e:
+    print(f"❌ Failed to initialize Garak models: {e}")
+    exit(1)
+# --- END OF FIX ---
+
 
 # Now we can safely import our app modules
 from app import db_session
@@ -45,7 +60,6 @@ def main():
         help="OpenAI model name (default: gpt-3.5-turbo)",
     )
 
-    # Now that the arguments are defined, this will work correctly.
     args = parser.parse_args()
 
     session = db_session()

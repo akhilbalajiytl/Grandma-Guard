@@ -1,49 +1,90 @@
-# app/scanner/runtime_scanner.py
 from .. import app, db_session
 from ..models import RuntimeLog
-from ..tasks import run_forensic_analysis
 from .api_utils import call_llm_api
-from .policy_engine import PolicyEngine
-from .triage_orchestrator import get_triage_orchestrator
 
-BLOCKED_RESPONSE_MESSAGE = "I'm sorry, but I cannot fulfill that request."
+# Import the GETTER function, not the class or an instance
+from .garak_loader import get_analyzer
+from .triage_classifier import TriageClassifier
+
+BLOCKED_RESPONSE_MESSAGE = (
+    "I'm sorry, but I cannot fulfill that request due to security policies."
+)
+
+# REMOVE the module-level instantiation
+# forensic_analyzer = ForensicAnalyzer()
 
 
 async def scan_and_respond_in_realtime(prompt: str, model_config: dict):
-    # 1. Call the LLM
-    response = call_llm_api(
-        model_config["api_endpoint"],
-        model_config["api_key"],
-        prompt,
-        model_config["model_identifier"],
-    )
+    forensic_analyzer = get_analyzer()
+    triage_decision, triage_reason = TriageClassifier.classify(prompt)
 
-    # Get the orchestrator instance and then analyze
-    triage_orchestrator = get_triage_orchestrator()
-    triage_profile = triage_orchestrator.analyze(prompt, response)
+    final_response = ""
+    llm_response_for_log = ""
+    risk_profile = {
+        "triage": {"decision": triage_decision, "reason": triage_reason},
+        "scores": {},  # This will hold the numeric Garak scores
+    }
+    final_decision = ""
 
-    # 3. Make a real-time decision
-    decision = PolicyEngine.decide(prompt, triage_profile)  # Pass the prompt in
-    final_response = response if decision == "ALLOWED" else BLOCKED_RESPONSE_MESSAGE
+    if triage_decision == "BLOCK":
+        final_response = BLOCKED_RESPONSE_MESSAGE
+        llm_response_for_log = "BLOCKED-BY-TRIAGE"
+        final_decision = "BLOCKED"
 
-    # 4. Log the initial event to the DB
+    elif triage_decision == "ALLOW":
+        # If triage allows it, we trust it for speed. Get the response and return it.
+        # No deep scan is performed for these clearly benign prompts.
+        final_response = call_llm_api(
+            model_config["api_endpoint"],
+            model_config["api_key"],
+            prompt,
+            model_config["model_identifier"],
+        )
+        llm_response_for_log = final_response
+        final_decision = "ALLOWED"
+        risk_profile["triage"]["deep_scan_status"] = "SKIPPED_BENIGN"
+
+    elif triage_decision == "DEEP_SCAN":
+        # --- STAGE 2: GET LLM RESPONSE & PERFORM DEEP SCAN ---
+        # First, get the model's response
+        llm_response = call_llm_api(
+            model_config["api_endpoint"],
+            model_config["api_key"],
+            prompt,
+            model_config["model_identifier"],
+        )
+        llm_response_for_log = llm_response
+        final_response = (
+            llm_response  # For now, we return the response and log forensics
+        )
+
+        # Now, run the deep forensic analysis on the (prompt, response) pair
+        print(
+            f"🔬 Performing deep forensic analysis for prompt flagged as '{triage_reason}'..."
+        )
+        deep_scan_results = forensic_analyzer.analyze(prompt, llm_response)
+        # Put the scores in the 'scores' sub-dictionary
+        risk_profile["scores"] = deep_scan_results
+
+        final_decision = "ALLOWED_WITH_FINDINGS"
+
+    # Log the event to the database
     with app.app_context():
         log_entry = RuntimeLog(
             user_prompt=prompt,
-            llm_response=response,
-            triage_risk_profile=triage_profile,
-            decision=decision,
+            llm_response=llm_response_for_log,
+            # The JSON column is now named forensic_risk_profile, let's use that.
+            # We will store the entire new risk_profile structure.
+            # Let's remove triage_risk_profile for simplicity.
+            forensic_risk_profile=risk_profile,
+            decision=final_decision,
             model_identifier=model_config["model_identifier"],
-            forensic_status="PENDING",
+            forensic_status="COMPLETE",
         )
         session = db_session()
         session.add(log_entry)
         session.commit()
-        log_id = log_entry.id
         session.close()
 
-    # 5. Kick off the slow forensic analysis in the background
-    run_forensic_analysis.send(log_id)
-
-    # 6. Return the response to the user immediately
+    # Return the final response to the user
     return final_response

@@ -1,6 +1,7 @@
 # app/scanner/api_utils.py
 import time
 
+import aiohttp
 import jwt
 import requests
 
@@ -42,10 +43,11 @@ def call_llm_api(endpoint, api_key, prompt, api_model_identifier):
     json_data = {
         "model": api_model_identifier,
         "messages": [{"role": "user", "content": prompt}],
+        "stream": False,  # Explicitly disable streaming
     }
 
     try:
-        response = requests.post(endpoint, headers=headers, json=json_data, timeout=30)
+        response = requests.post(endpoint, headers=headers, json=json_data, timeout=60)
         response.raise_for_status()
         response_data = response.json()
         if "choices" in response_data and response_data["choices"]:
@@ -59,25 +61,50 @@ def call_llm_api(endpoint, api_key, prompt, api_model_identifier):
 
 
 # NEW asynchronous version
-async def async_call_llm_api(session, api_endpoint, api_key, prompt, model_identifier):
+async def async_call_llm_api(
+    session: aiohttp.ClientSession, api_endpoint, api_key, prompt, model_identifier
+):
     """Asynchronously calls the LLM API using an aiohttp session."""
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+
+    # --- ADD "stream": false TO THE PAYLOAD ---
     payload = {
         "model": model_identifier,
         "messages": [{"role": "user", "content": prompt}],
+        "stream": False,  # Explicitly disable streaming
     }
 
     try:
         async with session.post(
             api_endpoint, headers=headers, json=payload, timeout=120
         ) as response:
-            if response.status == 200:
-                data = await response.json()
+            response.raise_for_status()  # This will raise an error for non-2xx statuses
+
+            # Now, we can safely expect a JSON response
+            data = await response.json()
+            if "choices" in data and data.get("choices"):
                 return data["choices"][0]["message"]["content"].strip()
             else:
-                error_text = await response.text()
-                print(f"API Error: Status {response.status}, Response: {error_text}")
-                return f"API_ERROR: Status {response.status}"
+                # Log the unexpected but valid JSON response
+                print(
+                    f"API Response Error: 'choices' key missing or empty. Full response: {data}"
+                )
+                return "API_ERROR: Unexpected response format."
+
+    except aiohttp.ClientResponseError as e:
+        # This catches HTTP errors like 401, 404, 500
+        print(
+            f"API HTTP Error: Status {e.status}, Message: {e.message}, URL: {e.request_info.url}"
+        )
+        return f"API_ERROR: Status {e.status}"
+    except aiohttp.ContentTypeError as e:
+        # This specifically catches the error you were seeing, in case an API ignores "stream": false
+        error_text = await response.text()
+        print(
+            f"API Content-Type Error: Mimetype {e.headers.get('Content-Type')} is not JSON. Response text: {error_text[:200]}..."
+        )
+        return "API_ERROR: Unexpected content type."
     except Exception as e:
+        # Catches other issues like timeouts, network problems
         print(f"Network/Request Error: {e}")
         return f"NETWORK_ERROR: {e}"

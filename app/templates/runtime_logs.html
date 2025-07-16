@@ -26,7 +26,7 @@
                 <tr>
                     <th>Timestamp</th>
                     <th>Decision</th>
-                    <th>Triage Risks</th>
+                    <th>Triage Details</th> <!-- Changed Header -->
                     <th>Forensic Scan</th>
                     <th>Forensic Risks</th>
                     <th>Prompt & Response</th>
@@ -34,23 +34,29 @@
             </thead>
             <tbody>
                 {% for log in logs %}
-                <tr style="background-color: {{ '#8B0000' if log.decision == 'BLOCKED' else 'transparent' }};">
+                <!-- Use a more subtle color for blocked rows -->
+                <tr style="background-color: {{ 'rgba(192, 75, 75, 0.15)' if log.decision == 'BLOCKED' else 'transparent' }};">
                     <td style="white-space: nowrap;">{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
                     <td style="font-weight: bold;">{{ log.decision }}</td>
                     <td>
-                        {% if log.triage_risk_profile %}
+                        {# Safely access and display triage information #}
+                        {% if log.forensic_risk_profile and log.forensic_risk_profile.triage %}
                             <ul class="risk-list">
-                            {% for risk, score in log.triage_risk_profile.items() %}
-                                <li class="{{ 'high-risk' if score > 0.5 else '' }}">{{ risk }}: {{ "%.2f"|format(score) }}</li>
-                            {% endfor %}
+                                <li><strong>Decision:</strong> {{ log.forensic_risk_profile.triage.decision }}</li>
+                                <li><strong>Reason:</strong> {{ log.forensic_risk_profile.triage.reason }}</li>
+                                {% if log.forensic_risk_profile.triage.deep_scan_status %}
+                                <li><strong>Scan:</strong> {{ log.forensic_risk_profile.triage.deep_scan_status }}</li>
+                                {% endif %}
                             </ul>
                         {% endif %}
                     </td>
                     <td><span class="status-tag status-{{ log.forensic_status }}">{{ log.forensic_status }}</span></td>
                     <td>
-                        {% if log.forensic_risk_profile %}
+                        {# Safely access and display the numeric scores #}
+                        {% if log.forensic_risk_profile and log.forensic_risk_profile.scores %}
                             <ul class="risk-list">
-                            {% for risk, score in log.forensic_risk_profile.items() %}
+                            {# This loop is now safe because it only iterates over the scores dict #}
+                            {% for risk, score in log.forensic_risk_profile.scores.items() %}
                                  <li class="{{ 'high-risk' if score > 0.5 else '' }}">{{ risk }}: {{ "%.2f"|format(score) }}</li>
                             {% endfor %}
                             </ul>

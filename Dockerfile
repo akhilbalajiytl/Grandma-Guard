@@ -55,6 +55,9 @@ COPY . .
 COPY . .
 RUN chmod +x /app/entrypoint.sh
 ENTRYPOINT ["/app/entrypoint.sh"]
-# Point Gunicorn to the new 'asgi.py' file. The 'app' variable inside that
-# file is the ASGI-compatible, wrapped version of your Flask application.
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "-k", "uvicorn.workers.UvicornWorker", "asgi:app"]
+# Copy the new gunicorn config file into the container
+COPY gunicorn.conf.py .
+
+# The CMD is now much cleaner. It just tells gunicorn to use our config file.
+# We no longer need --preload, --timeout, or --log-level here.
+CMD ["gunicorn", "-c", "gunicorn.conf.py", "asgi:app"]

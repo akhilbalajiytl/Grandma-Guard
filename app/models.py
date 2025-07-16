@@ -78,15 +78,15 @@ class RuntimeLog(Base):
     user_prompt: Mapped[str] = mapped_column(Text, nullable=False)
     llm_response: Mapped[str] = mapped_column(Text, nullable=False)
 
-    # The outcome of our real-time scan
-    triage_risk_profile: Mapped[dict | None] = mapped_column(JSON)
+    # REMOVE the redundant triage_risk_profile column
+    # triage_risk_profile: Mapped[dict | None] = mapped_column(JSON)
     decision: Mapped[str] = mapped_column(String(50), nullable=False)
     model_identifier: Mapped[str] = mapped_column(String(255))
 
-    # --- NEW: Fields for the SLOW, ASYNCHRONOUS deep scan ---
     forensic_status: Mapped[str] = mapped_column(
         Enum("PENDING", "RUNNING", "COMPLETE", "ERROR", name="forensic_status_enum"),
         default="PENDING",
         nullable=False,
     )
+    # This single column will now hold the full structured profile
     forensic_risk_profile: Mapped[dict | None] = mapped_column(JSON)

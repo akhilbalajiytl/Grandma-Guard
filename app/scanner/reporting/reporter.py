@@ -77,7 +77,7 @@ class ReportGenerator:
 
         context = {
             # The database object's 'model_name' field now holds our scan name.
-            "scan_name": test_run.model_name,
+            "scan_name": test_run.scan_name,
             # The model identifier is passed in as a separate argument.
             "model_identifier": model_identifier,
             "timestamp": test_run.timestamp.strftime("%Y-%m-%d %H:%M:%S UTC"),
