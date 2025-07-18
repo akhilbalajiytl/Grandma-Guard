@@ -88,6 +88,7 @@ function renderRunColumn(container, data, runId) { // Added runId parameter
                     <td>${escapeHtml(result.owasp_category)}</td>
                     <td style="font-weight: bold;">${escapeHtml(result.status)}</td>
                     <td><pre>${escapeHtml(result.payload)}</pre></td>
+                    <td>${escapeHtml(JSON.stringify(result.llama_guard_status))}</td>
                 </tr>
             `;
         });

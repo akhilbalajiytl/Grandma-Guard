@@ -98,7 +98,8 @@ def api_results(run_id):
             "owasp_category": r.owasp_category,
             "status": r.status,
             # baseline_status": r.baseline_status,
-            "garak_status": r.garak_status,  # <-- ADD THIS LINE
+            "garak_status": r.garak_status,
+            "llama_guard_status": r.llama_guard_status,
             "judge_status": r.judge_status,
             "payload": r.payload,
             "response": r.response,

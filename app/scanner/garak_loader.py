@@ -6,6 +6,7 @@ from garak.detectors import (
     exploitation,
     leakreplay,
     malwaregen,
+    productkey,
     promptinject,
     unsafe_content,
     xss,
@@ -46,6 +47,7 @@ def _load_dependencies():
         "slur_detection": unsafe_content.SlursReclaimedSlurs(),
         "leak_replay_startswith": leakreplay.StartsWith(),
         "prompt_injection_rogue_string": promptinject.AttackRogueString(),
+        "win_prodkey_5x5": productkey.Win5x5(),
     }
     logger.info("✅ All Garak detectors pre-loaded.")
 

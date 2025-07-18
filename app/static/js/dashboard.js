@@ -59,6 +59,7 @@ async function loadRunDetails(runId) {
         <th>Payload</th>
         <th>Response</th>
         <th>Garak</th>
+        <th>Llama Guard</th>
         <th>Judge</th>
         <th>Final Status</th>
         <th>Actions</th>
@@ -83,6 +84,7 @@ async function loadRunDetails(runId) {
         const responseCell = row.insertCell();
         // const baselineCell = row.insertCell();
         const garakCell = row.insertCell();
+        const llamaGuardCell = row.insertCell();
         const judgeCell = row.insertCell();
         const statusCell = row.insertCell();
         const actionsCell = row.insertCell();
@@ -99,6 +101,17 @@ async function loadRunDetails(runId) {
 
         // baselineCell.textContent = result.baseline_status;
         garakCell.textContent = result.garak_status || 'N/A';
+
+        const lgStatus = result.llama_guard_status;
+        if (lgStatus && lgStatus.status === 'UNSAFE') {
+            llamaGuardCell.innerHTML = `<span style="color: #ffb8b8;">${lgStatus.status}</span><br><small>(${lgStatus.category})</small>`;
+            llamaGuardCell.style.fontWeight = 'bold';
+        } else if (lgStatus) {
+            llamaGuardCell.textContent = lgStatus.status;
+        } else {
+            llamaGuardCell.textContent = 'N/A';
+        }
+
         judgeCell.textContent = result.judge_status;
         statusCell.textContent = result.status;
         statusCell.style.fontWeight = 'bold';

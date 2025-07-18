@@ -4,14 +4,12 @@ from .api_utils import call_llm_api
 
 # Import the GETTER function, not the class or an instance
 from .garak_loader import get_analyzer
+from .post_policy import PostGenerationPolicyEngine
 from .triage_classifier import TriageClassifier
 
 BLOCKED_RESPONSE_MESSAGE = (
     "I'm sorry, but I cannot fulfill that request due to security policies."
 )
-
-# REMOVE the module-level instantiation
-# forensic_analyzer = ForensicAnalyzer()
 
 
 async def scan_and_respond_in_realtime(prompt: str, model_config: dict):
@@ -66,7 +64,17 @@ async def scan_and_respond_in_realtime(prompt: str, model_config: dict):
         # Put the scores in the 'scores' sub-dictionary
         risk_profile["scores"] = deep_scan_results
 
-        final_decision = "ALLOWED_WITH_FINDINGS"
+        # Now, make a final decision based on the analysis of the response.
+        post_gen_decision, post_gen_reason = PostGenerationPolicyEngine(risk_profile)
+
+        if post_gen_decision == "BLOCK":
+            final_response = BLOCKED_RESPONSE_MESSAGE
+            final_decision = "BLOCKED"
+            # Add the reason to the risk profile for logging
+            risk_profile["post_gen_reason"] = post_gen_reason
+        else:
+            final_response = llm_response
+            final_decision = "ALLOWED_WITH_FINDINGS"
 
     # Log the event to the database
     with app.app_context():
