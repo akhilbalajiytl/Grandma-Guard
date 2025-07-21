@@ -4,7 +4,7 @@ import re
 import datasets
 import pandas as pd
 
-OUTPUT_FILE = "finetune_dataset.jsonl"
+OUTPUT_FILE = "app/finetune_dataset.jsonl"
 SAMPLES_PER_CATEGORY = 500  # Aim for a decent number of examples per class
 
 
@@ -37,12 +37,17 @@ def generate_dataset():
     # --- Category: ALLOW (Clearly benign, conversational prompts) ---
     print("  -> Generating ALLOW examples...")
     try:
-        # Use a dataset of harmless questions
         dataset = datasets.load_dataset(
             "toughdata/quora-question-answer-dataset", split="train"
         )
-        df = dataset.to_pandas().sample(n=SAMPLES_PER_CATEGORY, random_state=42)
-        for prompt in df["question"]:
+        df = dataset.to_pandas()
+
+        # --- THIS IS THE FIX ---
+        # Ensure we don't sample more than available
+        num_samples = min(SAMPLES_PER_CATEGORY, len(df))
+        sampled_df = df.sample(n=num_samples, random_state=42)
+
+        for prompt in sampled_df["question"]:
             all_data.append({"prompt": prompt, "classification": "ALLOW"})
     except Exception as e:
         print(f"    - Could not load Quora dataset: {e}")
@@ -50,14 +55,15 @@ def generate_dataset():
     # --- Category: DEEP_SCAN (Suspicious, requires deeper analysis) ---
     print("  -> Generating DEEP_SCAN examples...")
     try:
-        # Get harmful prompts from Anthropic dataset
         dataset = datasets.load_dataset("Anthropic/hh-rlhf", split="train")
         df = dataset.to_pandas()
         df["prompt"] = df["chosen"].apply(extract_human_prompt)
         df.dropna(subset=["prompt"], inplace=True)
-        harmful_prompts = (
-            df["prompt"].sample(n=SAMPLES_PER_CATEGORY, random_state=42).tolist()
-        )
+
+        # --- THIS IS THE FIX ---
+        num_samples = min(SAMPLES_PER_CATEGORY, len(df))
+        harmful_prompts = df["prompt"].sample(n=num_samples, random_state=42).tolist()
+
         for prompt in harmful_prompts:
             all_data.append({"prompt": prompt, "classification": "DEEP_SCAN"})
     except Exception as e:
@@ -66,9 +72,16 @@ def generate_dataset():
     # Add role-playing prompts
     try:
         dataset = datasets.load_dataset("fka/awesome-chatgpt-prompts", split="train")
-        df = dataset.to_pandas().sample(n=SAMPLES_PER_CATEGORY // 2, random_state=42)
-        df["full_prompt"] = "Act as a " + df["act"] + ". " + df["prompt"]
-        for prompt in df["full_prompt"]:
+        df = dataset.to_pandas()
+
+        # --- THIS IS THE FIX that addresses the error directly ---
+        num_samples = min(SAMPLES_PER_CATEGORY // 2, len(df))
+        sampled_df = df.sample(n=num_samples, random_state=42)
+
+        sampled_df["full_prompt"] = (
+            "Act as a " + sampled_df["act"] + ". " + sampled_df["prompt"]
+        )
+        for prompt in sampled_df["full_prompt"]:
             all_data.append({"prompt": prompt, "classification": "DEEP_SCAN"})
     except Exception as e:
         print(f"    - Could not load awesome-prompts dataset: {e}")
