@@ -4,47 +4,41 @@ from .api_utils import call_llm_api
 
 # Import the GETTER function, not the class or an instance
 from .garak_loader import get_analyzer
+from .llama_guard import LlamaGuardEvaluator
 from .post_policy import PostGenerationPolicyEngine
-from .triage_classifier import TriageClassifier
 
 BLOCKED_RESPONSE_MESSAGE = (
     "I'm sorry, but I cannot fulfill that request due to security policies."
 )
 
+llama_guard = LlamaGuardEvaluator()
+
 
 async def scan_and_respond_in_realtime(prompt: str, model_config: dict):
     forensic_analyzer = get_analyzer()
-    triage_decision, triage_reason = TriageClassifier.classify(prompt)
 
     final_response = ""
     llm_response_for_log = ""
-    risk_profile = {
-        "triage": {"decision": triage_decision, "reason": triage_reason},
-        "scores": {},  # This will hold the numeric Garak scores
-    }
+    # The risk profile will now be simpler at the start
+    risk_profile = {}
     final_decision = ""
 
-    if triage_decision == "BLOCK":
-        final_response = BLOCKED_RESPONSE_MESSAGE
-        llm_response_for_log = "BLOCKED-BY-TRIAGE"
-        final_decision = "BLOCKED"
+    # --- STAGE 1: LLAMA GUARD INPUT ANALYSIS (RUNS ON EVERY PROMPT) ---
+    print("  - Running Llama Guard input scan...")
+    llama_guard_verdict = llama_guard.evaluate_prompt(prompt)
+    print(f"  - Llama Guard Input Result: {llama_guard_verdict}")
+    risk_profile["llama_guard_input_scan"] = llama_guard_verdict
 
-    elif triage_decision == "ALLOW":
-        # If triage allows it, we trust it for speed. Get the response and return it.
-        # No deep scan is performed for these clearly benign prompts.
-        final_response = call_llm_api(
-            model_config["api_endpoint"],
-            model_config["api_key"],
-            prompt,
-            model_config["model_identifier"],
+    if llama_guard_verdict.get("status") == "UNSAFE":
+        print(
+            f"🚨 Llama Guard BLOCK: Prompt flagged as {llama_guard_verdict.get('category_name')}."
         )
-        llm_response_for_log = final_response
-        final_decision = "ALLOWED"
-        risk_profile["triage"]["deep_scan_status"] = "SKIPPED_BENIGN"
-
-    elif triage_decision == "DEEP_SCAN":
-        # --- STAGE 2: GET LLM RESPONSE & PERFORM DEEP SCAN ---
-        # First, get the model's response
+        final_response = BLOCKED_RESPONSE_MESSAGE
+        llm_response_for_log = "BLOCKED-BY-LLAMA-GUARD-INPUT-SCAN"
+        final_decision = "BLOCKED"
+    else:
+        # --- PROMPT IS SAFE, PROCEED TO TARGET LLM ---
+        print("  - Llama Guard deemed prompt safe. Querying target LLM...")
         llm_response = call_llm_api(
             model_config["api_endpoint"],
             model_config["api_key"],
@@ -52,38 +46,31 @@ async def scan_and_respond_in_realtime(prompt: str, model_config: dict):
             model_config["model_identifier"],
         )
         llm_response_for_log = llm_response
-        final_response = (
-            llm_response  # For now, we return the response and log forensics
-        )
 
-        # Now, run the deep forensic analysis on the (prompt, response) pair
-        print(
-            f"🔬 Performing deep forensic analysis for prompt flagged as '{triage_reason}'..."
-        )
-        deep_scan_results = forensic_analyzer.analyze(prompt, llm_response)
-        # Put the scores in the 'scores' sub-dictionary
-        risk_profile["scores"] = deep_scan_results
+        # --- STAGE 2: GARAK OUTPUT ANALYSIS ---
+        print("🔬 Performing Garak forensic analysis on LLM response...")
+        garak_scores = forensic_analyzer.analyze(prompt, llm_response)
+        risk_profile["garak_output_scan"] = garak_scores
 
-        # Now, make a final decision based on the analysis of the response.
-        post_gen_decision, post_gen_reason = PostGenerationPolicyEngine(risk_profile)
+        # Run the Post-Generation Policy Engine on the Garak results
+        post_gen_decision, post_gen_reason = PostGenerationPolicyEngine(
+            llama_guard_input_verdict=llama_guard_verdict,
+            garak_risk_profile={"scores": garak_scores},
+        )
 
         if post_gen_decision == "BLOCK":
             final_response = BLOCKED_RESPONSE_MESSAGE
             final_decision = "BLOCKED"
-            # Add the reason to the risk profile for logging
             risk_profile["post_gen_reason"] = post_gen_reason
         else:
             final_response = llm_response
-            final_decision = "ALLOWED_WITH_FINDINGS"
+            final_decision = "ALLOWED"
 
-    # Log the event to the database
+    # --- LOGGING ---
     with app.app_context():
         log_entry = RuntimeLog(
             user_prompt=prompt,
             llm_response=llm_response_for_log,
-            # The JSON column is now named forensic_risk_profile, let's use that.
-            # We will store the entire new risk_profile structure.
-            # Let's remove triage_risk_profile for simplicity.
             forensic_risk_profile=risk_profile,
             decision=final_decision,
             model_identifier=model_config["model_identifier"],
@@ -94,5 +81,4 @@ async def scan_and_respond_in_realtime(prompt: str, model_config: dict):
         session.commit()
         session.close()
 
-    # Return the final response to the user
     return final_response

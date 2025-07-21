@@ -27,8 +27,8 @@ DEEP_SCAN_PATTERNS = {
         re.IGNORECASE,
     ),
     # Potentially sensitive topics
-    "SENSITIVE_TOPICS": re.compile(
-        r"\b(how\s+to\s+make\s+a\s+bomb|self-harm|illegal\s+activities|hate\s+speech)\b",
+    "SENSITIVE_KEYWORDS": re.compile(
+        r"(bomb|self-harm|illegal|hate speech|steal|theft|phishing|malware|hack)",
         re.IGNORECASE,
     ),
 }

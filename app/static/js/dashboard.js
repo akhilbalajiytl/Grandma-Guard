@@ -104,7 +104,7 @@ async function loadRunDetails(runId) {
 
         const lgStatus = result.llama_guard_status;
         if (lgStatus && lgStatus.status === 'UNSAFE') {
-            llamaGuardCell.innerHTML = `<span style="color: #ffb8b8;">${lgStatus.status}</span><br><small>(${lgStatus.category})</small>`;
+            llamaGuardCell.innerHTML = `<span style="color: #ffb8b8; font-weight: bold;">${lgStatus.status}</span><br><small>(${lgStatus.category_name})</small>`;
             llamaGuardCell.style.fontWeight = 'bold';
         } else if (lgStatus) {
             llamaGuardCell.textContent = lgStatus.status;
