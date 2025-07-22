@@ -3,7 +3,7 @@
 
 # Networking
 bind = "0.0.0.0:5000"
-workers = 2  # Start with 2 workers, can increase later
+workers = 1  # Start with 2 workers, can increase later
 
 # Worker class
 worker_class = "uvicorn.workers.UvicornWorker"

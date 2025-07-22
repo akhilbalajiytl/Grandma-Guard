@@ -64,20 +64,19 @@ def finetune():
     )
     model = get_peft_model(model, lora_config)
 
-    # --- 5. Configure Training ---
+   # --- 5. Configure Training ---
     training_args = TrainingArguments(
         output_dir=f"./{NEW_ADAPTER_NAME}",
         per_device_train_batch_size=2,
         gradient_accumulation_steps=4,
         learning_rate=2e-4,
-        max_steps=100,  # A small number for a quick test run. Increase to 500-1000 for a real training.
+        max_steps=100, # A small number for a quick test run. Increase to 500-1000 for a real training.
         logging_steps=10,
-        fp16=True,  # Use mixed-precision training
+        fp16=True, # Use mixed-precision training
         optim="paged_adamw_8bit",
         save_strategy="steps",
         save_steps=50,
-        report_to="none",  # Disable wandb/tensorboard reporting for simplicity
-        max_seq_length=512,  # Adjust based on dataset
+        report_to="none", # Disable wandb/tensorboard reporting for simplicity
     )
 
     # --- 6. Create and Start the Trainer ---
@@ -86,20 +85,18 @@ def finetune():
         model=model,
         train_dataset=dataset,
         peft_config=lora_config,
-        # dataset_text_field="text",
-        tokenizer=tokenizer,
         args=training_args,
     )
 
     print("Starting training...")
     trainer.train()
-
+    
     print("Training complete.")
-
+    
     # --- 7. Save the final adapter ---
     print(f"Saving LoRA adapter to ./{NEW_ADAPTER_NAME}-final")
     trainer.model.save_pretrained(f"./{NEW_ADAPTER_NAME}-final")
-
+    
     print("\n✅ Fine-tuning complete! Your new LoRA adapter is saved.")
 
 

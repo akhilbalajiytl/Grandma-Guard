@@ -16,12 +16,15 @@ from .detectors import refusal_v2
 
 # IMPORTANT: Import ForensicAnalyzer here. This is now a one-way dependency.
 from .forensic_analyzer import ForensicAnalyzer
+from .smart_classifier import SmartClassifier
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # This will be our single, shared, pre-loaded instance.
 ANALYZER_INSTANCE = None
+CLASSIFIER_INSTANCE = None
 
 
 def _load_dependencies():
@@ -29,7 +32,7 @@ def _load_dependencies():
     Instantiates all detectors and creates the single ForensicAnalyzer instance.
     This function is called once per worker.
     """
-    global ANALYZER_INSTANCE
+    global ANALYZER_INSTANCE, CLASSIFIER_INSTANCE
 
     if ANALYZER_INSTANCE:  # Prevent re-loading
         return
@@ -56,6 +59,10 @@ def _load_dependencies():
     ANALYZER_INSTANCE = ForensicAnalyzer(detectors_to_use=garak_detectors)
     logger.info("✅ Shared ForensicAnalyzer instance created and ready.")
 
+    # --- Load the SmartClassifier ---
+    logger.info("Loading Smart Triage Classifier model...")
+    CLASSIFIER_INSTANCE = SmartClassifier()
+    logger.info("✅ Smart Triage Classifier loaded and ready.")
 
 def get_analyzer():
     """
@@ -66,3 +73,12 @@ def get_analyzer():
             "ForensicAnalyzer has not been initialized. Models are not loaded."
         )
     return ANALYZER_INSTANCE
+
+# --- Getter function for the classifier ---
+def get_classifier():
+    """
+    A getter function to safely access the shared smart classifier instance.
+    """
+    if CLASSIFIER_INSTANCE is None:
+        raise RuntimeError("SmartClassifier has not been initialized.")
+    return CLASSIFIER_INSTANCE
