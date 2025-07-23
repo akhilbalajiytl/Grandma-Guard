@@ -1,23 +1,22 @@
 # app/scanner/garak_loader.py
 import logging
 
-from garak.detectors import (
-    dan,
-    exploitation,
-    leakreplay,
-    malwaregen,
-    productkey,
-    promptinject,
-    unsafe_content,
-    xss,
-)
+# --- Corrected, explicit imports ---
+from garak.detectors.dan import DAN, DevMode
+from garak.detectors.xss import MarkdownExfilBasic
+from garak.detectors.exploitation import SQLiEcho, PythonCodeExecution
+from garak.detectors.malwaregen import AnyCode
+from garak.detectors.unsafe_content import ToxicCommentModel, SlursReclaimedSlurs
+from garak.detectors.leakreplay import StartsWith
+from garak.detectors.promptinject import AttackRogueString
+from garak.detectors.productkey import Win5x5
 
+# Your custom detector
 from .detectors import refusal_v2
 
-# IMPORTANT: Import ForensicAnalyzer here. This is now a one-way dependency.
-from .forensic_analyzer import ForensicAnalyzer
+# Your other app components
 from .smart_classifier import SmartClassifier
-
+from .forensic_analyzer import ForensicAnalyzer
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -28,29 +27,24 @@ CLASSIFIER_INSTANCE = None
 
 
 def _load_dependencies():
-    """
-    Instantiates all detectors and creates the single ForensicAnalyzer instance.
-    This function is called once per worker.
-    """
     global ANALYZER_INSTANCE, CLASSIFIER_INSTANCE
-
-    if ANALYZER_INSTANCE:  # Prevent re-loading
-        return
+    if ANALYZER_INSTANCE: return
 
     logger.info("Pre-loading Garak detectors...")
     garak_detectors = {
+        # We now instantiate using the directly imported classes
         "refusal_v2": refusal_v2.RefusalDetectorV2(),
-        "dan_detection": dan.DAN(),
-        "dev_mode_detection": dan.DevMode(),
-        "xss_markdown_basic": xss.MarkdownExfilBasic(),
-        "sqli_echo": exploitation.SQLiEcho(),
-        "python_code_execution": exploitation.PythonCodeExecution(),
-        "any_code_generated": malwaregen.AnyCode(),
-        "toxicity_comment_model": unsafe_content.ToxicCommentModel(),
-        "slur_detection": unsafe_content.SlursReclaimedSlurs(),
-        "leak_replay_startswith": leakreplay.StartsWith(),
-        "prompt_injection_rogue_string": promptinject.AttackRogueString(),
-        "win_prodkey_5x5": productkey.Win5x5(),
+        "dan_detection": DAN(),
+        "dev_mode_detection": DevMode(),
+        "xss_markdown_basic": MarkdownExfilBasic(),
+        "sqli_echo": SQLiEcho(),
+        "python_code_execution": PythonCodeExecution(),
+        "any_code_generated": AnyCode(),
+        "toxicity_comment_model": ToxicCommentModel(),
+        "slur_detection": SlursReclaimedSlurs(),
+        "leak_replay_startswith": StartsWith(),
+        "prompt_injection_rogue_string": AttackRogueString(),
+        "win_prodkey_5x5": Win5x5(),
     }
     logger.info("✅ All Garak detectors pre-loaded.")
 

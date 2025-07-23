@@ -1,4 +1,4 @@
-# docker-compose.yml (Final Correct Version)
+# docker-compose.yml (Final, Robust, GPU-Enabled)
 
 networks:
   llm_toolkit_net:
@@ -6,65 +6,56 @@ networks:
 
 services:
   webapp:
-    # Use the override variable if it's set, otherwise fall back to building locally.
-    image: ${WEBAPP_IMAGE_OVERRIDE:-}
     build:
       context: .
+      dockerfile: Dockerfile
+    # --- START OF FIXES for webapp ---
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1 # or 'all'
+              capabilities: [gpu]
+    # --- END OF FIXES for webapp ---
     ports:
       - "5001:5000"
     volumes:
       - ./app:/app/app
       - ./wsgi.py:/app/wsgi.py
-      - ./run_cli.py:/app/run_cli.py
-      # Mount the host's cache directory (provided by the HF_CACHE_PATH env var)
-      # into the container's cache location.
-      - ${HF_CACHE_PATH}:/root/.cache/huggingface
-
-    runtime: nvidia
-
-    # Instead of 'env_file', we define the environment variables directly.
-    # Docker Compose will first look for these variables in the host environment
-    # (which we set in the CI job). If it can't find them, it will then look
-    # in a .env file in the project root. This is the perfect behavior.
+      # No need to mount run_cli.py for the webapp service
     environment:
-      - NVIDIA_VISIBLE_DEVICES=all
+      # This is now handled by the 'deploy' section
+      # - NVIDIA_VISIBLE_DEVICES=all
       - DATABASE_URL=mysql+pymysql://${MYSQL_USER}:${MYSQL_PASSWORD}@db/${MYSQL_DATABASE}
-      # You can add other variables your webapp needs here, like OPENAI_API_KEY
-      # For local runs, it will pick them up from your .env file.
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - TARGET_API_ENDPOINT=${TARGET_API_ENDPOINT}
       - TARGET_LLM_API_KEY=${TARGET_LLM_API_KEY}
       - NIM_API_KEY=${NIM_API_KEY}
       - HF_TOKEN=${HF_TOKEN}
-
     depends_on:
       db:
-        condition: service_healthy # Wait for the database to be healthy before starting the webapp
+        condition: service_healthy
     restart: always
     networks:
       - llm_toolkit_net
 
   db:
+    # ... (no changes needed for db)
     image: mysql:8.0
     command: --default-authentication-plugin=mysql_native_password
-    ports:
-      - "3307:3306"
-
+    ports: ["3307:3306"]
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${MYSQL_DATABASE}
       MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
-
-    # Add a health check to the database service.
     healthcheck:
-      # This command repeatedly tries to connect to the database.
-      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "${MYSQL_USER}", "-p${MYSQL_PASSWORD}" ]
-      interval: 10s # Check every 10 seconds
-      timeout: 5s # Wait 5 seconds for the check to respond
-      retries: 10 # Try up to 10 times (100 seconds total)
-      start_period: 30s # Give the container 30 seconds to start up before the first check
-
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "${MYSQL_USER}", "-p${MYSQL_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
     volumes:
       - mysql_data:/var/lib/mysql
     restart: always
@@ -72,31 +63,43 @@ services:
       - llm_toolkit_net
 
   redis:
+    # ... (no changes needed for redis)
     image: "redis:alpine"
-    ports:
-      - "6379:6379"
+    ports: ["6379:6379"]
     networks:
       - llm_toolkit_net
 
   worker:
-    image: ${WEBAPP_IMAGE_OVERRIDE:-}
     build:
       context: .
+      dockerfile: Dockerfile
+    # --- START OF FIXES for worker ---
+    # The worker also needs access to the GPU if it runs ML tasks
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    # --- END OF FIXES for worker ---
     command: dramatiq --threads 2 app.tasks
     volumes:
       - ./app:/app/app
-      - ./run_cli.py:/app/run_cli.py
+      # No need to mount run_cli.py for the worker service
     environment:
       - DATABASE_URL=mysql+pymysql://${MYSQL_USER}:${MYSQL_PASSWORD}@db/${MYSQL_DATABASE}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - NIM_API_KEY=${NIM_API_KEY}
       - HF_TOKEN=${HF_TOKEN}
     depends_on:
-      redis: 
+      redis:
         condition: service_started
-      db: 
-        condition: service_healthy # Wait for the database to be healthy before starting the worker
+      db:
+        condition: service_healthy
+    restart: unless-stopped # Use unless-stopped for workers
     networks:
       - llm_toolkit_net
+
 volumes:
   mysql_data:

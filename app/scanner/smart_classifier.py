@@ -53,6 +53,9 @@ class SmartClassifier:
         
         # Load the LoRA adapter onto the base model
         self.model = PeftModel.from_pretrained(base_model, ADAPTER_PATH)
+        # Force the model to use the legacy cache format that is compatible
+        # with the Phi-3 modeling script. This avoids the 'get_max_length' error.
+        # self.model.generation_config.cache_implementation = "static"
         self.model.eval()
         
         print("✅ SmartClassifier model loaded successfully.")
@@ -61,30 +64,30 @@ class SmartClassifier:
         """
         Classifies the prompt using the fine-tuned model.
         """
-        input_text = f"<|user|>\nClassify the following prompt into one of three categories: BLOCK, ALLOW, or DEEP_SCAN. Prompt: \"{prompt}\"" \
-             f"<|end|>\n<|assistant|>\n"
-
-        # Determine the device to send the inputs to. The model knows its device.
-        device = self.model.device
-        inputs = self.tokenizer(input_text, return_tensors="pt").to(device)
+        input_text = f'<|user|>\nClassify the following prompt into one of three categories: BLOCK, ALLOW, or DEEP_SCAN. Prompt: "{prompt}"<|end|>\n<|assistant|>\n'
+        inputs = self.tokenizer(input_text, return_tensors="pt").to("cuda")
 
         with torch.no_grad():
-            outputs = self.model.generate(**inputs, max_new_tokens=5,
-                                          eos_token_id=self.tokenizer.eos_token_id)
+            outputs = self.model.generate(
+                **inputs,
+                max_new_tokens=5,
+                eos_token_id=self.tokenizer.eos_token_id,
+                use_cache=False
+            )
 
-        response_text = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+        # The tokenizer decodes the *entire* sequence, including the prompt.
+        # We need to extract the newly generated part.
+        # The new tokens start right after the input tokens end.
+        input_length = inputs.input_ids.shape[1]
+        response_tokens = outputs[0][input_length:]
+        classification = self.tokenizer.decode(response_tokens, skip_special_tokens=True).strip().upper()
 
-        # Extract just the classification from the full response
-        try:
-            classification = response_text.split("<|assistant|>")[1].strip().upper()
-        except IndexError:
-            # Handle cases where the model output is not in the expected format
-            print(f"⚠️ SmartClassifier parsing error. Full response: {response_text}")
-            return "DEEP_SCAN", "ML_CLASSIFIER_PARSE_ERROR" # Default to a safe action
-
-        if "BLOCK" in classification:
-            return "BLOCK", "ML_CLASSIFIER"
-        elif "DEEP_SCAN" in classification:
-            return "DEEP_SCAN", "ML_CLASSIFIER"
+        # A simple check to make sure we got a valid classification
+        if classification in ["BLOCK", "ALLOW", "DEEP_SCAN"]:
+            return classification, "ML_CLASSIFIER"
         else:
-            return "ALLOW", "ML_CLASSIFIER"
+            # Log the unexpected output for debugging, but still return a safe default
+            full_response_for_log = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+            print(f"⚠️ SmartClassifier parsing error. Full response: {full_response_for_log}")
+            # Default to DEEP_SCAN on any parsing error to be safe
+            return "DEEP_SCAN", "ML_CLASSIFIER_PARSE_ERROR"
