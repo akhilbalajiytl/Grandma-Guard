@@ -9,15 +9,13 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    # --- START OF FIXES for webapp ---
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              count: 1 # or 'all'
+              count: all
               capabilities: [gpu]
-    # --- END OF FIXES for webapp ---
     ports:
       - "5001:5000"
     volumes:
@@ -26,7 +24,7 @@ services:
       # No need to mount run_cli.py for the webapp service
     environment:
       # This is now handled by the 'deploy' section
-      # - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_VISIBLE_DEVICES=all
       - DATABASE_URL=mysql+pymysql://${MYSQL_USER}:${MYSQL_PASSWORD}@db/${MYSQL_DATABASE}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - TARGET_API_ENDPOINT=${TARGET_API_ENDPOINT}
@@ -36,12 +34,13 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    restart: always
+      db-init: # <-- ADD THIS DEPENDENCY
+        condition: service_completed_successfully
+    #restart: always
     networks:
       - llm_toolkit_net
 
   db:
-    # ... (no changes needed for db)
     image: mysql:8.0
     command: --default-authentication-plugin=mysql_native_password
     ports: ["3307:3306"]
@@ -58,12 +57,26 @@ services:
       start_period: 30s
     volumes:
       - mysql_data:/var/lib/mysql
-    restart: always
+    #restart: always
     networks:
       - llm_toolkit_net
-
+    
+  db-init:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # This service will run our new script and then exit
+    command: ["python", "create_db.py"]
+    environment:
+      - DATABASE_URL=mysql+pymysql://${MYSQL_USER}:${MYSQL_PASSWORD}@db/${MYSQL_DATABASE}
+    depends_on:
+      db:
+        # It waits for the DB to be healthy before running
+        condition: service_healthy
+    networks:
+      - llm_toolkit_net
+      
   redis:
-    # ... (no changes needed for redis)
     image: "redis:alpine"
     ports: ["6379:6379"]
     networks:
@@ -73,21 +86,19 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    # --- START OF FIXES for worker ---
     # The worker also needs access to the GPU if it runs ML tasks
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              count: 1
+              count: all
               capabilities: [gpu]
-    # --- END OF FIXES for worker ---
     command: dramatiq --threads 2 app.tasks
     volumes:
       - ./app:/app/app
-      # No need to mount run_cli.py for the worker service
     environment:
+      - NVIDIA_VISIBLE_DEVICES=all
       - DATABASE_URL=mysql+pymysql://${MYSQL_USER}:${MYSQL_PASSWORD}@db/${MYSQL_DATABASE}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - NIM_API_KEY=${NIM_API_KEY}
@@ -97,7 +108,9 @@ services:
         condition: service_started
       db:
         condition: service_healthy
-    restart: unless-stopped # Use unless-stopped for workers
+      db-init: # <-- ADD THIS DEPENDENCY
+        condition: service_completed_successfully
+    #restart: unless-stopped # Use unless-stopped for workers
     networks:
       - llm_toolkit_net
 

@@ -1,93 +1,79 @@
-# app/scanner/smart_classifier.py
-import os
-import token
-import torch
-from peft import PeftModel
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+# app/scanner/smart_classifier.py (Final API Version)
+import requests
+import json
+import os # Keep os import in case other files expect it
 
 # --- CONFIGURATION ---
-BASE_MODEL_NAME = "microsoft/Phi-3-mini-4k-instruct"
-ADAPTER_PATH = "./app/models/adapters/grandma-guard-phi3-classifier-final"
+# These are now for the API client, not for loading a local model
+OLLAMA_API_ENDPOINT = "http://localhost:11434/api/generate"
+MODEL_NAME = "grandma-guard-classifier" # The name you created in Ollama
 
 class SmartClassifier:
     def __init__(self):
-        print("Loading fine-tuned SmartClassifier model...")
-        
-        # This config is correct for CPU-compatible 4-bit loading
-        bnb_config = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_quant_type="nf4",
-            bnb_4bit_compute_dtype=torch.bfloat16,
-            bnb_4bit_use_double_quant=False,
-        )
-
-        hf_token = os.getenv("HF_TOKEN")
-
-        # Prepare the arguments for from_pretrained
-        model_kwargs = {
-            "quantization_config": bnb_config,
-            "trust_remote_code": True,
-            "token": hf_token,
-        }
-
-        # Only add device_map if a GPU is actually available
-        if torch.cuda.is_available():
-            print("✅ CUDA is available. Using device_map='auto'.")
-            model_kwargs["device_map"] = "auto"
-        else:
-            print("⚠️ CUDA not available. Loading model on CPU. This will be very slow.")
-            # Do NOT specify device_map for CPU loading with bitsandbytes.
-            # The library will handle it correctly.
-        
-        base_model = AutoModelForCausalLM.from_pretrained(
-            BASE_MODEL_NAME,
-            **model_kwargs # Unpack the conditional arguments
-        )
-        
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            BASE_MODEL_NAME, 
-            trust_remote_code=True,
-            token=hf_token,
-        )
-        self.tokenizer.pad_token = self.tokenizer.eos_token
-        
-        # Load the LoRA adapter onto the base model
-        self.model = PeftModel.from_pretrained(base_model, ADAPTER_PATH)
-        # Force the model to use the legacy cache format that is compatible
-        # with the Phi-3 modeling script. This avoids the 'get_max_length' error.
-        # self.model.generation_config.cache_implementation = "static"
-        self.model.eval()
-        
-        print("✅ SmartClassifier model loaded successfully.")
+        """
+        Initializes the SmartClassifier in API mode.
+        This is now a lightweight client that connects to a running Ollama server.
+        No models are loaded here.
+        """
+        print("✅ SmartClassifier (API Mode) is initialized and ready.")
+        # We can add a check here to see if the Ollama server is reachable at startup
+        try:
+            # A simple HEAD request to see if the server is alive
+            requests.head("http://localhost:11434", timeout=3)
+            print("  -> Successfully connected to Ollama server.")
+        except requests.exceptions.RequestException:
+            print("  -> ⚠️ WARNING: Could not connect to the Ollama server at http://localhost:11434.")
+            print("     Please ensure the Ollama server is running with your model loaded.")
 
     def classify(self, prompt: str) -> (str, str):
         """
-        Classifies the prompt using the fine-tuned model.
+        Classifies the prompt by calling the local Ollama API.
+        This method has the exact same signature (inputs and outputs) as the old version.
+        
+        Returns:
+            tuple[str, str]: A tuple containing the classification and the reason.
         """
-        input_text = f'<|user|>\nClassify the following prompt into one of three categories: BLOCK, ALLOW, or DEEP_SCAN. Prompt: "{prompt}"<|end|>\n<|assistant|>\n'
-        inputs = self.tokenizer(input_text, return_tensors="pt").to("cuda")
+        # Prepare the prompt exactly as the model expects from its Modelfile
+        # We only need to send the core user prompt, as the SYSTEM prompt is
+        # handled by Ollama itself.
+        # The prompt format is based on '<|user|>\n{{ .Prompt }}<|end|>\n<|assistant|>\n'
+        # with the system prompt applied before.
+        full_prompt_for_api = f'Classify the following prompt into one of three categories: BLOCK, ALLOW, or DEEP_SCAN. Prompt: "{prompt}"'
 
-        with torch.no_grad():
-            outputs = self.model.generate(
-                **inputs,
-                max_new_tokens=5,
-                eos_token_id=self.tokenizer.eos_token_id,
-                use_cache=False
-            )
+        try:
+            # Prepare the JSON payload for the Ollama API
+            payload = {
+                "model": MODEL_NAME,
+                "prompt": full_prompt_for_api,
+                "stream": False, # We want the full response at once
+                "options": {
+                    "num_predict": 5 # Limit the model to generate only a few tokens
+                }
+            }
+            
+            # Make the API call
+            response = requests.post(OLLAMA_API_ENDPOINT, json=payload, timeout=60)
+            response.raise_for_status() # Raise an HTTPError for bad responses (4xx or 5xx)
 
-        # The tokenizer decodes the *entire* sequence, including the prompt.
-        # We need to extract the newly generated part.
-        # The new tokens start right after the input tokens end.
-        input_length = inputs.input_ids.shape[1]
-        response_tokens = outputs[0][input_length:]
-        classification = self.tokenizer.decode(response_tokens, skip_special_tokens=True).strip().upper()
+            # Parse the JSON response
+            response_data = response.json()
+            classification = response_data.get("response", "").strip().upper()
 
-        # A simple check to make sure we got a valid classification
-        if classification in ["BLOCK", "ALLOW", "DEEP_SCAN"]:
-            return classification, "ML_CLASSIFIER"
-        else:
-            # Log the unexpected output for debugging, but still return a safe default
-            full_response_for_log = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
-            print(f"⚠️ SmartClassifier parsing error. Full response: {full_response_for_log}")
-            # Default to DEEP_SCAN on any parsing error to be safe
-            return "DEEP_SCAN", "ML_CLASSIFIER_PARSE_ERROR"
+            # Clean up the classification, as the model might add extra text
+            if "BLOCK" in classification:
+                final_class = "BLOCK"
+            elif "DEEP_SCAN" in classification:
+                final_class = "DEEP_SCAN"
+            elif "ALLOW" in classification:
+                final_class = "ALLOW"
+            else:
+                # Handle cases where the model gives an unexpected response
+                print(f"⚠️ SmartClassifier API parsing error. Full response: {classification}")
+                return "DEEP_SCAN", "ML_CLASSIFIER_PARSE_ERROR"
+
+            return final_class, "ML_CLASSIFIER_API"
+
+        except requests.exceptions.RequestException as e:
+            print(f"❌ Could not connect to Ollama API: {e}")
+            # Default to DEEP_SCAN if the model API is down, for safety
+            return "DEEP_SCAN", "API_CONNECTION_ERROR"

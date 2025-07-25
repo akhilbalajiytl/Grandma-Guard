@@ -24,13 +24,26 @@ db_session = scoped_session(
     sessionmaker(autocommit=False, autoflush=False, bind=engine)
 )
 
-# --- NEW: Trigger the Garak model pre-loading here ---
-# By importing the module, the code inside garak_loader.py will execute,
-# loading the models into the GARAK_DETECTORS variable before the server starts accepting requests.
-# print("Triggering Garak pre-loading...")
-# from .scanner import garak_loader  # <--- THIS IS THE TRIGGER
-
-# print("Garak pre-loading process finished.")
+# Trigger the model pre-loading here.
+# Because preload_app=True in gunicorn.conf.py, this code will run ONCE
+# in the master process before any workers are created.
+#print("Flask App Initializing: Triggering ML model pre-loading...")
+#try:
+    #from .scanner.smart_classifier import SmartClassifier
+    # You can also preload other models here if needed
+    # from .scanner.garak_loader import _load_dependencies
+    
+    # Instantiate the classifier to load it onto the GPU
+    # We can store it in a global variable if we want to reuse it, or just load it.
+    # For now, just loading it is enough to prove it works.
+    #smart_classifier_instance = SmartClassifier()
+    
+    #print("✅ ML Models pre-loaded successfully in master process.")
+#except Exception as e:
+    #print(f"❌ CRITICAL: Failed to pre-load ML models in master process: {e}")
+    # Optionally, you might want to exit if models fail to load
+    # import sys
+    # sys.exit(1)
 
 
 # --- PHASE 3: IMPORT AND REGISTER YOUR APP'S MODULES ---
@@ -41,9 +54,9 @@ from . import (
 )
 
 # Use the app context to ensure tables are created correctly
-with app.app_context():
+#with app.app_context():
      # Add checkfirst=True to prevent errors on restart
-    models.Base.metadata.create_all(bind=engine, checkfirst=True)
+    #models.Base.metadata.create_all(bind=engine, checkfirst=True)
 
 # Import routes to register them with the Flask app.
 from . import main

@@ -11,6 +11,8 @@ ENV PYTHONDONTWRITEBYTECODE=1
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gnupg \
     wget \
+    build-essential \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # --- Add NVIDIA's CUDA repository to get the necessary drivers ---
@@ -20,8 +22,8 @@ RUN wget https://developer.download.nvidia.com/compute/cuda/repos/debian11/x86_6
     apt-get update
 
 # Install the specific CUDA toolkit version required by PyTorch
-RUN apt-get install -y cuda-toolkit-12-1 && \
-    rm -rf /var/lib/apt/lists/*
+#RUN apt-get install -y cuda-toolkit-12-1 && \
+    #rm -rf /var/lib/apt/lists/*
 
 # Set PATH to include CUDA binaries
 ENV PATH /usr/local/cuda-12.1/bin:${PATH}

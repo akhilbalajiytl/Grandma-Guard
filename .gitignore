@@ -2,10 +2,31 @@
 .venv/
 venv/
 garak311/
+llama_venv/
 
 # Python cache
 __pycache__/
 *.pyc
+*.py[cod]
+*$py.class
+
+# --- Build Artifacts & Models ---
+# Ignore the llama.cpp build directory
+llama.cpp/
+
+# Ignore the merged Hugging Face model directory
+phi3-mini-classifier-merged/
+
+# Ignore the large, converted GGUF model file
+phi3-mini-classifier.gguf
+
+# Ignore any other model files you might download
+*.gguf
+*.safetensors
+
+# --- Datasets & Logs ---
+# Ignore the fine-tuning dataset file
+app/finetune_dataset.jsonl
 
 # Secrets file
 .env
@@ -20,6 +41,7 @@ notes.txt
 # Ignore other common files
 .DS_Store
 *.log
+Thumbs.db
 
 # Local database files
 ci_scan_results.db
