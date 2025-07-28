@@ -1,14 +1,17 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <title>Compare Runs - LLM Safety Toolkit</title>
     <!-- We will reuse the same dark mode styles -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/branding.css') }}">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-     <!-- We'll need a new JS file for this page's logic -->
+    <!-- We'll need a new JS file for this page's logic -->
     <script src="{{ url_for('static', filename='js/compare.js') }}" defer></script>
 </head>
+
 <body>
     <div class="compare-container">
         <header>
@@ -22,7 +25,8 @@
                 <select id="runA" onchange="loadComparison()">
                     <option value="">-- Select a Run --</option>
                     {% for run in runs %}
-                    <option value="{{ run.id }}">{{ run.scan_name }} ({{ run.timestamp.strftime('%Y-%m-%d %H:%M') }})</option>
+                    <option value="{{ run.id }}">{{ run.scan_name }} ({{ run.timestamp.strftime('%Y-%m-%d %H:%M') }})
+                    </option>
                     {% endfor %}
                 </select>
             </div>
@@ -31,7 +35,8 @@
                 <select id="runB" onchange="loadComparison()">
                     <option value="">-- Select a Run --</option>
                     {% for run in runs %}
-                    <option value="{{ run.id }}">{{ run.scan_name }} ({{ run.timestamp.strftime('%Y-%m-%d %H:%M') }})</option>
+                    <option value="{{ run.id }}">{{ run.scan_name }} ({{ run.timestamp.strftime('%Y-%m-%d %H:%M') }})
+                    </option>
                     {% endfor %}
                 </select>
             </div>
@@ -51,4 +56,5 @@
     </div>
 
 </body>
+
 </html>

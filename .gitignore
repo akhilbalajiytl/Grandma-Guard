@@ -10,6 +10,9 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+grandma-guard-phi3-classifier/
+grandma-guard-phi3-classifier/final
+*-final/
 # --- Build Artifacts & Models ---
 # Ignore the llama.cpp build directory
 llama.cpp/

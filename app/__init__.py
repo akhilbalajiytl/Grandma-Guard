@@ -54,9 +54,9 @@ from . import (
 )
 
 # Use the app context to ensure tables are created correctly
-#with app.app_context():
+with app.app_context():
      # Add checkfirst=True to prevent errors on restart
-    #models.Base.metadata.create_all(bind=engine, checkfirst=True)
+    models.Base.metadata.create_all(bind=engine, checkfirst=True)
 
 # Import routes to register them with the Flask app.
 from . import main

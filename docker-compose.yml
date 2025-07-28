@@ -21,9 +21,7 @@ services:
     volumes:
       - ./app:/app/app
       - ./wsgi.py:/app/wsgi.py
-      # No need to mount run_cli.py for the webapp service
     environment:
-      # This is now handled by the 'deploy' section
       - NVIDIA_VISIBLE_DEVICES=all
       - DATABASE_URL=mysql+pymysql://${MYSQL_USER}:${MYSQL_PASSWORD}@db/${MYSQL_DATABASE}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
@@ -34,8 +32,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      db-init: # <-- ADD THIS DEPENDENCY
-        condition: service_completed_successfully
     #restart: always
     networks:
       - llm_toolkit_net
@@ -61,20 +57,6 @@ services:
     networks:
       - llm_toolkit_net
     
-  db-init:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    # This service will run our new script and then exit
-    command: ["python", "create_db.py"]
-    environment:
-      - DATABASE_URL=mysql+pymysql://${MYSQL_USER}:${MYSQL_PASSWORD}@db/${MYSQL_DATABASE}
-    depends_on:
-      db:
-        # It waits for the DB to be healthy before running
-        condition: service_healthy
-    networks:
-      - llm_toolkit_net
       
   redis:
     image: "redis:alpine"
@@ -108,8 +90,6 @@ services:
         condition: service_started
       db:
         condition: service_healthy
-      db-init: # <-- ADD THIS DEPENDENCY
-        condition: service_completed_successfully
     #restart: unless-stopped # Use unless-stopped for workers
     networks:
       - llm_toolkit_net

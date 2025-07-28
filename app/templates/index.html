@@ -3,57 +3,88 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>LLM Safety Toolkit</title>
+    <title>Dashboard - Grandma Guard</title>
+    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/branding.css') }}">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    <style>
+        .container {
+            display: flex;
+            gap: 2rem;
+            padding: 0 2rem;
+        }
+
+        .sidebar {
+            flex: 1;
+            max-width: 400px;
+        }
+
+        .main-content {
+            flex: 3;
+        }
+    </style>
 </head>
 
 <body>
-    <div class="sidebar">
-        <h2>New Scan</h2>
-        <form action="/run" method="POST">
-            <label for="scan_name">Test Run Name:</label>
-            <input type="text" id="scan_name" name="scan_name" value="GPT-4o Test" required>
-            <label for="api_model_identifier">Model Identifier:</label>
-            <input type="text" id="api_model_identifier" name="api_model_identifier" value="gpt-4o" required>
-            <label for="api_endpoint">API Endpoint:</label>
-            <input type="text" id="api_endpoint" name="api_endpoint" value="https://api.openai.com/v1/chat/completions"
-                required>
-            <label for="api_key">API Key:</label>
-            <input type="password" id="api_key" name="api_key" placeholder="Enter API Key here" required>
-            <button type="submit">Start Scan</button>
-        </form>
-        <hr>
-        <h2>Past Runs</h2>
-        <div id="run-list">
-            {% for run in runs %}
-            <!-- THIS IS THE CRITICAL LINE TO CHECK -->
-            <div class="run-item" data-run-id="{{ run.id }}" onclick="loadRunDetails({{ run.id }})">
-                {{ run.scan_name }} ({{ run.timestamp.strftime('%Y-%m-%d %H:%M') }})
+    <header class="header-nav">
+        <img src="{{ url_for('static', filename='favicon.ico') }}" alt="Grandma Guard Logo" class="logo">
+        <!-- Add logo to /static/ -->
+        <div class="brand-title">Grandma Guard<small>Knitting a safety blanket around your AI</small></div>
+        <div class="nav-links">
+            <a href="{{ url_for('runtime_logs_page') }}">Runtime Logs</a>
+            <a href="{{ url_for('compare_page') }}">Compare Runs</a>
+        </div>
+    </header>
+
+    <div class="container">
+        <aside class="sidebar">
+            <div class="card">
+                <h2>New Scan</h2>
+                <form action="/run" method="POST">
+                    <form action="/run" method="POST">
+                        <label for="scan_name">Test Run Name:</label>
+                        <input type="text" id="scan_name" name="scan_name" value="GPT-4o Test" required>
+                        <label for="api_model_identifier">Model Identifier:</label>
+                        <input type="text" id="api_model_identifier" name="api_model_identifier" value="gpt-4o"
+                            required>
+                        <label for="api_endpoint">API Endpoint:</label>
+                        <input type="text" id="api_endpoint" name="api_endpoint"
+                            value="https://api.openai.com/v1/chat/completions" required>
+                        <label for="api_key">API Key:</label>
+                        <input type="password" id="api_key" name="api_key" placeholder="Enter API Key here" required>
+                        <button type="submit">Start Scan</button>
+                    </form>
             </div>
-            {% endfor %}
-        </div>
-    </div>
-    <div class="main-content">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-        <h1>Dashboard</h1>
-        <a href="{{ url_for('runtime_logs_page') }}" class="back-link" style="margin-right: 20px;">Runtime Logs →</a>
-        <a href="{{ url_for('compare_page') }}" class="back-link">Compare Runs →</a>
-        </div>
-        <h2 id="current-model-name">Select a run to view details</h2>
-        <div style="position: relative; width: 75%; height: 40vh;">
-            <canvas id="owasp-chart"></canvas>
-        </div>
-        <h3>Detailed Results</h3>
-        <table id="results-table">
-            <thead>
-                <tr><!-- Headers will be populated by JS --></tr>
-            </thead>
-            <tbody id="results-tbody"></tbody>
-        </table>
+            <div class="card" style="margin-top: 2rem;">
+                <h2>Past Runs</h2>
+                <div id="run-list">
+                    {% for run in runs %}
+                    <div class="run-item" data-run-id="{{ run.id }}" onclick="loadRunDetails({{ run.id }})">
+                        <strong>{{ run.scan_name }}</strong><br><small style="color: var(--text-muted);">{{
+                            run.timestamp.strftime('%Y-%m-%d %H:%M') }}</small>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <h1 id="current-model-name">Dashboard</h1>
+            <p style="color: var(--text-muted);">Select a run from the list to view its details.</p>
+            <div class="card" style="height: 45vh;">
+                <canvas id="owasp-chart"></canvas>
+            </div>
+            <h3 style="margin-top: 2rem;">Detailed Results</h3>
+            <table id="results-table">
+                <thead>
+                    <tr><!-- Headers will be populated by JS --></tr>
+                </thead>
+                <tbody id="results-tbody"></tbody>
+            </table>
+        </main>
     </div>
 
-    <script src="/static/js/dashboard.js"></script>
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
 </body>
 
 </html>

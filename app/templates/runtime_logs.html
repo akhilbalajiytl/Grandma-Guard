@@ -1,26 +1,27 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
-    <title>Runtime Security Logs - LLM Safety Toolkit</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
-    <style>
-        .risk-list { margin:0; padding-left: 15px; font-size: 0.9em; list-style-type: none; }
-        .risk-list li.high-risk { color: #c0392b; font-weight: bold; }
-        .status-tag { padding: 3px 8px; border-radius: 5px; font-size: 0.8em; font-weight: bold; color: #fff; }
-        .status-PENDING { background-color: #f1c40f; }
-        .status-RUNNING { background-color: #3498db; }
-        .status-COMPLETE { background-color: #2ecc71; }
-        .status-ERROR { background-color: #e74c3c; }
-    </style>
+    <title>Runtime Logs - Grandma Guard</title>
+    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/branding.css') }}">
+    <!-- Local styles from old file are now mostly in branding.css -->
 </head>
+
 <body>
-    <div class="main-content" style="max-width: 1800px; margin: 0 auto;">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-            <h1>Runtime Security Event Logs</h1>
-            <a href="{{ url_for('index') }}" class="back-link">← Back to Dashboard</a>
+    <header class="header-nav">
+        <img src="{{ url_for('static', filename='favicon.ico') }}" alt="Grandma Guard Logo" class="logo">
+        <div class="brand-title">Grandma Guard<small>Knitting a safety blanket around your AI</small></div>
+        <div class="nav-links">
+            <a href="{{ url_for('index') }}">Dashboard</a>
+            <a href="{{ url_for('compare_page') }}">Compare Runs</a>
         </div>
-        <h3>Showing last 100 events. Newest first. (Page does not auto-refresh)</h3>
+    </header>
+
+    <div style="padding: 0 2rem;">
+        <h1>Runtime Security Event Logs</h1>
+        <p style="color: var(--text-muted);">Showing last 100 events. Newest first.</p>
         <table id="results-table">
             <thead>
                 <tr>
@@ -35,38 +36,42 @@
             <tbody>
                 {% for log in logs %}
                 <!-- Use a more subtle color for blocked rows -->
-                <tr style="background-color: {{ 'rgba(192, 75, 75, 0.15)' if log.decision == 'BLOCKED' else 'transparent' }};">
+                <tr
+                    style="background-color: {{ 'rgba(192, 75, 75, 0.15)' if log.decision == 'BLOCKED' else 'transparent' }};">
                     <td style="white-space: nowrap;">{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
                     <td style="font-weight: bold;">{{ log.decision }}</td>
                     <td>
                         {# Safely access and display triage information #}
                         {% if log.forensic_risk_profile and log.forensic_risk_profile.triage %}
-                            <ul class="risk-list">
-                                <li><strong>Decision:</strong> {{ log.forensic_risk_profile.triage.decision }}</li>
-                                <li><strong>Reason:</strong> {{ log.forensic_risk_profile.triage.reason }}</li>
-                                {% if log.forensic_risk_profile.triage.deep_scan_status %}
-                                <li><strong>Scan:</strong> {{ log.forensic_risk_profile.triage.deep_scan_status }}</li>
-                                {% endif %}
-                            </ul>
+                        <ul class="risk-list">
+                            <li><strong>Decision:</strong> {{ log.forensic_risk_profile.triage.decision }}</li>
+                            <li><strong>Reason:</strong> {{ log.forensic_risk_profile.triage.reason }}</li>
+                            {% if log.forensic_risk_profile.triage.deep_scan_status %}
+                            <li><strong>Scan:</strong> {{ log.forensic_risk_profile.triage.deep_scan_status }}</li>
+                            {% endif %}
+                        </ul>
                         {% endif %}
                     </td>
                     <td><span class="status-tag status-{{ log.forensic_status }}">{{ log.forensic_status }}</span></td>
                     <td>
                         {# Safely access and display the numeric scores #}
                         {% if log.forensic_risk_profile and log.forensic_risk_profile.scores %}
-                            <ul class="risk-list">
+                        <ul class="risk-list">
                             {# This loop is now safe because it only iterates over the scores dict #}
                             {% for risk, score in log.forensic_risk_profile.scores.items() %}
-                                 <li class="{{ 'high-risk' if score > 0.5 else '' }}">{{ risk }}: {{ "%.2f"|format(score) }}</li>
+                            <li class="{{ 'high-risk' if score > 0.5 else '' }}">{{ risk }}: {{ "%.2f"|format(score) }}
+                            </li>
                             {% endfor %}
-                            </ul>
+                        </ul>
                         {% else %}
-                            -
+                        -
                         {% endif %}
                     </td>
                     <td>
-                        <strong>Prompt:</strong><pre>{{ log.user_prompt }}</pre>
-                        <strong>Response:</strong><pre>{{ log.llm_response }}</pre>
+                        <strong>Prompt:</strong>
+                        <pre>{{ log.user_prompt }}</pre>
+                        <strong>Response:</strong>
+                        <pre>{{ log.llm_response }}</pre>
                     </td>
                 </tr>
                 {% endfor %}
@@ -74,4 +79,5 @@
         </table>
     </div>
 </body>
+
 </html>
