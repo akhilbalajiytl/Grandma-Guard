@@ -32,7 +32,9 @@ RUN wget https://developer.download.nvidia.com/compute/cuda/repos/debian11/x86_6
     dpkg -i cuda-keyring_1.0-1_all.deb && \
     apt-get update
 
-# Install the full GPU requirements
+# --- THIS IS THE FIX ---
+# We must copy BOTH requirements files before running pip install.
+COPY requirements.txt .
 COPY requirements-dev-gpu.txt .
 RUN pip install --no-cache-dir -r requirements-dev-gpu.txt
 
