@@ -1,23 +1,25 @@
-# app/scanner/runtime_scanner.py
+# app/scanner/runtime_scanner.py (Final Corrected Version)
+
 from .. import app, db_session
 from ..models import RuntimeLog
 from .api_utils import call_llm_api
 from .post_policy import PostGenerationPolicyEngine
-# Import the GETTERS for both the analyzer and the new classifier
-from .garak_loader import get_analyzer, get_classifier
+from .garak_loader import get_analyzer
 from .llama_guard import LlamaGuardEvaluator
+from .smart_classifier import SmartClassifier 
 
 BLOCKED_RESPONSE_MESSAGE = (
     "I'm sorry, but this request has been blocked as it violates our safety policies."
 )
 
-# Instantiate Llama Guard once, as it's lightweight (just holds a key).
+# This is correct. We create one instance of our lightweight API clients.
+smart_classifier = SmartClassifier()
 llama_guard = LlamaGuardEvaluator()
 
 async def scan_and_respond_in_realtime(prompt: str, model_config: dict):
-    # Get the shared, pre-loaded instances at the start of the request.
+    # Get the shared, pre-loaded Garak analyzer instance.
     forensic_analyzer = get_analyzer()
-    smart_classifier = get_classifier()
+    # We will use the 'smart_classifier' instance we already created above.
 
     # Initialize variables
     final_response = ""
@@ -26,26 +28,22 @@ async def scan_and_respond_in_realtime(prompt: str, model_config: dict):
     final_decision = ""
 
     # --- STAGE 1: SMART TRIAGE CLASSIFICATION ---
-    # This is our fast, fine-tuned first line of defense.
     print("  - Running Smart Triage Classifier...")
+    # This line is now correct, it uses the instance from the top of the file.
     triage_decision, triage_reason = smart_classifier.classify(prompt)
     print(f"  - Smart Triage Result: {triage_decision}")
     risk_profile["smart_triage"] = {
         "decision": triage_decision,
         "reason": triage_reason,
-        "model": "grandma-guard-phi3-classifier"
+        "model": "grandma-guard-classifier"
     }
 
-    # If the SmartClassifier is highly confident the prompt is malicious, we block immediately.
     if triage_decision == "BLOCK":
         print("🚨 Smart Triage BLOCK: Prompt flagged for immediate blocking.")
         final_response = BLOCKED_RESPONSE_MESSAGE
         llm_response_for_log = "BLOCKED-BY-SMART-CLASSIFIER"
         final_decision = "BLOCKED"
     else:
-        # If the prompt is classified as ALLOW or DEEP_SCAN, it proceeds to the next layer.
-        # This creates a "zero-trust" funnel where prompts must pass multiple checks.
-        
         # --- STAGE 2: LLAMA GUARD INPUT ANALYSIS ---
         print("  - Running Llama Guard input scan...")
         llama_guard_verdict = llama_guard.evaluate_prompt(prompt)
@@ -60,6 +58,7 @@ async def scan_and_respond_in_realtime(prompt: str, model_config: dict):
         else:
             # --- STAGE 3: QUERY TARGET LLM & GARAK OUTPUT ANALYSIS ---
             print("  - All input scans passed. Querying target LLM...")
+            # Note: call_llm_api is not async in your provided file, if it is, you need 'await'
             llm_response = call_llm_api(
                 model_config["api_endpoint"],
                 model_config["api_key"],
@@ -72,7 +71,6 @@ async def scan_and_respond_in_realtime(prompt: str, model_config: dict):
             garak_scores = forensic_analyzer.analyze(prompt, llm_response)
             risk_profile["garak_output_scan"] = garak_scores
 
-            # Run the Post-Generation Policy Engine on the Garak results and Llama Guard context
             post_gen_decision, post_gen_reason = PostGenerationPolicyEngine(
                 llama_guard_input_verdict=llama_guard_verdict,
                 garak_risk_profile={"scores": garak_scores},
@@ -84,7 +82,6 @@ async def scan_and_respond_in_realtime(prompt: str, model_config: dict):
                 risk_profile["post_gen_reason"] = post_gen_reason
             else:
                 final_response = llm_response
-                # We can now confidently say it's ALLOWED after passing all checks
                 final_decision = "ALLOWED"
 
     # --- LOGGING ---

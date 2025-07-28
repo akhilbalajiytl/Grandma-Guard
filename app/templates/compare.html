@@ -3,42 +3,81 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>Compare Runs - LLM Safety Toolkit</title>
-    <!-- We will reuse the same dark mode styles -->
-    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
+    <title>Compare Runs - Grandma Guard</title>
+    <link rel="icon" href="{{ url_for('static', filename='grandmaguard.png') }}" type="image/x-icon">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/branding.css') }}">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- We'll need a new JS file for this page's logic -->
     <script src="{{ url_for('static', filename='js/compare.js') }}" defer></script>
+    <style>
+        .page-container {
+            padding: 0 2rem;
+        }
+
+        .comparison-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2em;
+            align-items: start;
+            /* Aligns columns at the top */
+        }
+
+        /* Additional styling for the summary card in this context */
+        .result-column .card {
+            margin-bottom: 2rem;
+        }
+
+        .result-column .card ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .result-column .card li {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.5em 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .result-column .card li:last-child {
+            border-bottom: none;
+        }
+    </style>
 </head>
 
 <body>
-    <div class="compare-container">
-        <header>
-            <h1>Run Comparison</h1>
-            <a href="{{ url_for('index') }}" class="back-link">← Back to Dashboard</a>
-        </header>
+    <header class="header-nav">
+        <img src="{{ url_for('static', filename='grandmaguard.png') }}" alt="Grandma Guard Logo" class="logo">
+        <div class="brand-title">Grandma Guard<small>Knitting a safety blanket around your AI</small></div>
+        <div class="nav-links">
+            <a href="{{ url_for('index') }}">Dashboard</a>
+            <a href="{{ url_for('runtime_logs_page') }}">Runtime Logs</a>
+        </div>
+    </header>
 
-        <div class="selection-panel">
-            <div class="selector">
-                <label for="runA">Select Run A (Baseline)</label>
-                <select id="runA" onchange="loadComparison()">
-                    <option value="">-- Select a Run --</option>
-                    {% for run in runs %}
-                    <option value="{{ run.id }}">{{ run.scan_name }} ({{ run.timestamp.strftime('%Y-%m-%d %H:%M') }})
-                    </option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="selector">
-                <label for="runB">Select Run B (Challenger)</label>
-                <select id="runB" onchange="loadComparison()">
-                    <option value="">-- Select a Run --</option>
-                    {% for run in runs %}
-                    <option value="{{ run.id }}">{{ run.scan_name }} ({{ run.timestamp.strftime('%Y-%m-%d %H:%M') }})
-                    </option>
-                    {% endfor %}
-                </select>
+    <div class="page-container">
+        <h1>Run Comparison</h1>
+
+        <div class="card" style="margin-bottom: 2em;">
+            <div style="display: flex; gap: 2em;">
+                <div style="flex: 1;">
+                    <label for="runA">Select Run A (Baseline)</label>
+                    <select id="runA" onchange="loadComparison()">
+                        <option value="">-- Select a Run --</option>
+                        {% for run in runs %}
+                        <option value="{{ run.id }}">{{ run.scan_name }} ({{ run.timestamp.strftime('%Y-%m-%d %H:%M')
+                            }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div style="flex: 1;">
+                    <label for="runB">Select Run B (Challenger)</label>
+                    <select id="runB" onchange="loadComparison()">
+                        <option value="">-- Select a Run --</option>
+                        {% for run in runs %}
+                        <option value="{{ run.id }}">{{ run.scan_name }} ({{ run.timestamp.strftime('%Y-%m-%d %H:%M')
+                            }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
             </div>
         </div>
 
@@ -54,7 +93,6 @@
             </div>
         </div>
     </div>
-
 </body>
 
 </html>
