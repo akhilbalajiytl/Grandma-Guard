@@ -88,6 +88,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
             context: .
+            target: production
             push: false
             load: true
             tags: ${{ env.WEBAPP_IMAGE_OVERRIDE }}

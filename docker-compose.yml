@@ -9,6 +9,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: dev-gpu
     deploy:
       resources:
         reservations:
