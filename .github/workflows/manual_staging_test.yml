@@ -1,45 +1,113 @@
-# .github/workflows/manual_staging_test.yml (Final, Simplified, and Corrected)
+# ==============================================================================
+# GRANDMAGUARD MANUAL STAGING TEST WORKFLOW
+# ==============================================================================
+# 
+# Purpose: Manual security testing workflow for staging environment validation
+# 
+# This workflow provides on-demand testing capabilities for the GrandmaGuard
+# security scanning system. It performs comprehensive LLM safety testing using
+# real AI models in a controlled staging environment.
+#
+# Key Features:
+# - Manual trigger via GitHub Actions UI (workflow_dispatch)
+# - Full Docker containerization for consistent testing environment
+# - MySQL database for scan result persistence
+# - Hugging Face model caching for performance optimization
+# - Docker registry caching to reduce build times
+# - Comprehensive reporting with artifact upload
+# - Automated test summary generation
+#
+# Security Considerations:
+# - Uses GitHub secrets for API keys and sensitive data
+# - Isolated staging database with non-production credentials
+# - Container isolation for security testing operations
+#
+# Maintenance Notes:
+# - Update model versions and endpoints as needed
+# - Monitor cache effectiveness and adjust retention policies
+# - Review and rotate staging credentials periodically
+# ==============================================================================
 
 name: Manual Staging Test
 
+# Trigger Configuration: Manual execution only
+# This workflow is designed for on-demand testing and validation
 on:
   workflow_dispatch:
 
 jobs:
   staging-test:
+    # Infrastructure Configuration
     runs-on: ubuntu-latest
+    
+    # Required permissions for container registry access and artifact upload
     permissions:
-      contents: read
-      packages: write
+      contents: read      # Read repository content
+      packages: write     # Write to GitHub Container Registry for caching
       
+    # Environment Variables
+    # These configure the staging environment and testing parameters
     env:
+      # MySQL Database Configuration (Staging Environment)
       MYSQL_USER: staging_user
       MYSQL_PASSWORD: staging_password
       MYSQL_DATABASE: staging_db
       MYSQL_ROOT_PASSWORD: staging_root_password
+      
+      # API Keys (Retrieved from GitHub Secrets)
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      NIM_API_KEY: ${{ secrets.NIM_API_KEY }}
+      
+      # Cache and Build Configuration
       HF_CACHE_PATH: /home/runner/.cache/huggingface
-      # Define a tag for the image we're about to build locally
+      
+      # Docker Image Tagging Strategy
+      # Unique tag per workflow run to avoid conflicts
       WEBAPP_IMAGE_OVERRIDE: llm-safety-toolkit:ci-${{ github.run_id }}
-      # Define the cache image path
+      
+      # Container Registry Cache Path
+      # Used for Docker layer caching to improve build performance
       CACHE_IMAGE_PATH: ghcr.io/${{ github.repository_owner }}/llm-safety-toolkit
 
     steps:
+      # ==================================================================
+      # STEP 1: SOURCE CODE CHECKOUT
+      # ==================================================================
+      # Download the repository source code to the runner
       - name: Check out repository
         uses: actions/checkout@v4
 
+      # ==================================================================
+      # STEP 2: REPORTS DIRECTORY SETUP
+      # ==================================================================
+      # Create output directory for scan reports and artifacts
+      # This ensures the directory exists before containers try to write to it
       - name: Create Reports Directory
         run: mkdir -p ./reports_output
         
+      # ==================================================================
+      # STEP 3: HUGGING FACE MODEL CACHING
+      # ==================================================================
+      # Cache ML models to avoid re-downloading on every run
+      # This significantly improves performance for subsequent runs
       - name: Cache Hugging Face models
         uses: actions/cache@v4
         with:
           path: ${{ env.HF_CACHE_PATH }}
           key: ${{ runner.os }}-hf-${{ hashFiles('**/requirements.txt') }}
 
+      # ==================================================================
+      # STEP 4: DOCKER BUILDX SETUP
+      # ==================================================================
+      # Set up advanced Docker build capabilities including caching
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      # ==================================================================
+      # STEP 5: CONTAINER REGISTRY AUTHENTICATION
+      # ==================================================================
+      # Log in to GitHub Container Registry for Docker layer caching
+      # This enables pushing/pulling cache layers to reduce build times
       - name: Log in to GHCR (for caching)
         uses: docker/login-action@v3
         with:
@@ -47,28 +115,46 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
           
-      # This step builds the image, pushes the cache to GHCR, AND
-      # loads the final image into the local Docker daemon so docker compose can use it.
+      # ==================================================================
+      # STEP 6: DOCKER IMAGE BUILD AND CACHE
+      # ==================================================================
+      # Build the application Docker image with registry caching
+      # This step:
+      # 1. Builds the production target of the Dockerfile
+      # 2. Uses registry cache to speed up builds
+      # 3. Loads the image into local Docker daemon for compose usage
+      # 4. Pushes cache layers to registry for future builds
       - name: Build and Cache Docker image
         uses: docker/build-push-action@v5
         with:
-            context: .
-            target: production
-            push: false
-            load: true
-            tags: ${{ env.DOCKER_IMAGE_TAG }}
-            # Use the lowercase-compliant cache path
+            context: .                                    # Build context (current directory)
+            target: production                            # Dockerfile target stage
+            push: false                                   # Don't push final image (only cache)
+            load: true                                    # Load image into local Docker daemon
+            tags: ${{ env.DOCKER_IMAGE_TAG }}           # Tag for the built image
+            # Registry cache configuration for performance optimization
             cache-from: type=registry,ref=${{ env.CACHE_IMAGE_PATH }}:buildcache
             cache-to: type=registry,ref=${{ env.CACHE_IMAGE_PATH }}:buildcache,mode=max
 
+      # ==================================================================
+      # STEP 7: DATABASE SERVICE STARTUP
+      # ==================================================================
+      # Start the MySQL database service in detached mode
+      # This provides persistent storage for scan results and test data
       - name: Start Database Service
-        # We start the 'db' from the main compose file.
         run: docker compose -f docker-compose.yml up -d db
         env:
           WEBAPP_IMAGE_OVERRIDE: ${{ env.WEBAPP_IMAGE_OVERRIDE }}
       
-      # Now that we are using the original docker-compose.yml, the 'run' command
-      # will behave exactly like it did in your original successful workflow.
+      # ==================================================================
+      # STEP 8: SECURITY SCAN EXECUTION
+      # ==================================================================
+      # Execute the main security scanning workflow
+      # This step:
+      # 1. Runs the GrandmaGuard CLI in a containerized environment
+      # 2. Tests against OpenAI GPT-4o-Mini model
+      # 3. Captures all output to a log file for analysis
+      # 4. Uses staging database for result persistence
       - name: Run Scan
         run: |
           bash -c '
@@ -76,6 +162,7 @@ jobs:
               -e CI=true \
               -e DATABASE_URL="mysql+pymysql://staging_user:staging_password@db/staging_db" \
               -e OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
+              -e NIM_API_KEY=${{ secrets.NIM_API_KEY }} \
               scan python run_cli.py \
                 --scan-name "Staging Test: GPT-4o-Mini" \
                 --api-endpoint "https://api.openai.com/v1/chat/completions" \
@@ -84,25 +171,40 @@ jobs:
             | tee staging_scan_output.log
           '
   
-      # Upload the generated report as a build artifact 
+      # ==================================================================
+      # STEP 9: SCAN REPORT ARTIFACT UPLOAD
+      # ==================================================================
+      # Upload generated reports as GitHub Actions artifacts
+      # This preserves test results for download and analysis
       - name: Upload Scan Report Artifact
         uses: actions/upload-artifact@v4
         with:
-          # The name of the artifact bundle that will appear in the GitHub UI
+          # Artifact name visible in GitHub Actions UI
           name: llm-safety-scan-report
-          # The path on the host runner where the report was saved
+          # Local path containing the generated reports
           path: ./reports_output/
-          # How long to keep the artifact (e.g., 7 days)
+          # Retention period for artifact storage (7 days)
           retention-days: 7
 
-      # Step 6: Publish the Job Summary from the log file
+      # ==================================================================
+      # STEP 10: TEST SUMMARY GENERATION
+      # ==================================================================
+      # Generate a comprehensive test summary for the GitHub Actions UI
+      # This step:
+      # 1. Extracts key metrics from the scan log
+      # 2. Creates a formatted summary in GitHub markdown
+      # 3. Includes expandable details with full scan output
+      # 4. Only runs if all previous steps succeeded
       - name: Publish Test Summary
         if: success()
         run: |
+          # Extract the final security score from scan output
           score_line=$(grep 'Score:' staging_scan_output.log | tail -n 1)
           if [ -z "$score_line" ]; then
               score_line="Score: Not found"
           fi
+          
+          # Generate formatted summary for GitHub Actions
           echo "### 🛡️ LLM Safety Toolkit: Manual Staging Test" >> $GITHUB_STEP_SUMMARY
           echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
           echo "**Result:** ✅ Real Scan Completed" >> $GITHUB_STEP_SUMMARY
@@ -115,9 +217,12 @@ jobs:
           echo '```' >> $GITHUB_STEP_SUMMARY
           echo "</details>" >> $GITHUB_STEP_SUMMARY
 
-      # Step 7: Display logs only if a step failed
+      # ==================================================================
+      # STEP 11: FAILURE DEBUGGING AND DIAGNOSTICS
+      # ==================================================================
+      # Display container logs when workflow fails for debugging
+      # This provides visibility into container-level issues and errors
       - name: Display container logs on failure
-        # We need WEBAPP_IMAGE here for docker compose logs to resolve the service correctly.
         env:
           WEBAPP_IMAGE: ${{ env.DOCKER_IMAGE }}:latest
         if: failure()

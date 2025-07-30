@@ -1,4 +1,43 @@
 #!/usr/bin/env python3
+"""Command Line Interface for GrandmaGuard Security Scanning.
+
+This module provides a command-line interface for running GrandmaGuard security
+scans in CI/CD pipelines and automated testing environments. It initializes
+the necessary dependencies, creates test runs, and executes comprehensive
+security scans against specified API endpoints.
+
+The CLI tool is designed for integration with continuous integration systems,
+allowing automated security testing of AI applications and APIs. It supports
+configurable scan parameters and handles both local and CI execution environments.
+
+Features:
+    - Automated dependency initialization for CLI execution
+    - Database management for test run tracking
+    - Configurable API endpoint and authentication
+    - Support for different OpenAI model backends
+    - CI/CD environment detection and configuration
+    - Comprehensive error handling and logging
+
+Example:
+    Run a security scan:
+        python run_cli.py --scan-name "Production API Test" \\
+                         --api-endpoint "https://api.example.com/chat" \\
+                         --api-key "your-api-key" \\
+                         --openai-model "gpt-4"
+
+Environment Variables:
+    DATABASE_URL_HOST: Database connection string for local runs
+    CI: Set to "true" for CI environment detection
+
+Requirements:
+    - Proper .env configuration for database access
+    - Valid API endpoint and authentication credentials
+    - Initialized Garak models for security testing
+
+Note:
+    The CLI handles environment detection automatically, using SQLite for CI
+    environments and the configured database for local development.
+"""
 # pyright: reportMissingImports=false
 import argparse
 import os
@@ -48,6 +87,32 @@ from app.scanner.engine import start_scan_thread
 
 
 def main():
+    """Main CLI function for executing GrandmaGuard security scans.
+    
+    Parses command line arguments, sets up the database session, creates
+    a new test run record, and initiates the security scanning process.
+    The function handles the complete lifecycle of a CLI-based security scan.
+    
+    Command Line Arguments:
+        --scan-name: Descriptive name for the test run
+        --api-endpoint: Target API endpoint URL for scanning
+        --api-key: Authentication credentials for the API
+        --openai-model: Model to use for scan analysis (default: gpt-3.5-turbo)
+    
+    The function:
+    1. Parses and validates command line arguments
+    2. Creates a new test run in the database
+    3. Initiates the security scan with specified parameters
+    4. Waits for scan completion and reports results
+    
+    Raises:
+        SystemExit: If required arguments are missing or invalid
+        Exception: If database operations or scan initialization fails
+        
+    Note:
+        The function uses synchronous execution (wait=True) to ensure
+        the CLI process doesn't exit before scan completion.
+    """
     parser = argparse.ArgumentParser(description="Run CI/CD Scan for the application")
     parser.add_argument("--scan-name", required=True, help="Name of the test run")
     parser.add_argument(
@@ -88,4 +153,9 @@ def main():
 
 
 if __name__ == "__main__":
+    """Main execution block for the CLI interface.
+    
+    Executes the main CLI function when the script is run directly,
+    providing command-line access to GrandmaGuard security scanning.
+    """
     main()

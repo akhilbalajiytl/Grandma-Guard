@@ -1,30 +1,108 @@
-/* app/static/css/branding.css */
+/**
+ * ============================================================================
+ * GRANDMAGUARD SECURITY DASHBOARD BRANDING & UI STYLESHEET
+ * ============================================================================
+ * 
+ * Purpose: Comprehensive visual identity and user interface styling for the
+ * GrandmaGuard AI security assessment platform dashboard and web interface.
+ * 
+ * Design Philosophy:
+ * The visual design embodies the "grandmother's protection" concept through:
+ * - Warm, trustworthy color palette inspired by comfort and security
+ * - Professional typography ensuring excellent readability for security data
+ * - Subtle textures evoking the "knitted protection" metaphor
+ * - Accessible design patterns supporting security analyst workflows
+ * 
+ * Brand Color System:
+ * - Dark Teal (#1E2A2B): Primary background, conveying stability and trust
+ * - Medium Teal (#3A6B6F): Secondary elements, supporting professional appearance
+ * - Plum (#8B5A8C): Accent color for important security status indicators
+ * - Orange (#F2A444): Call-to-action elements and positive interactions
+ * - Cream (#F5E8D7): Primary text color ensuring excellent contrast
+ * 
+ * Security-Focused Design Elements:
+ * - Color-coded status indicators for rapid threat assessment
+ * - High contrast ratios meeting WCAG accessibility standards
+ * - Monospace fonts for code and payload display
+ * - Card-based layouts for organized information hierarchy
+ * - Responsive design supporting various screen sizes and devices
+ * 
+ * Technical Implementation:
+ * - CSS Custom Properties for consistent theming and maintenance
+ * - Modern CSS Grid and Flexbox for responsive layouts
+ * - Optimized font loading for performance
+ * - SVG-based textures for crisp display across device densities
+ * 
+ * Usage Guidelines:
+ * This stylesheet provides the complete visual foundation for GrandmaGuard's
+ * web interface, including dashboard components, security result displays,
+ * comparative analysis views, and administrative interfaces.
+ * 
+ * @author GrandmaGuard Security Team
+ * @license MIT
+ * @version 2.0
+ * ============================================================================
+ */
+
+/* Import optimized Google Fonts for professional typography */
 @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&display=swap');
 
+/**
+ * CSS Custom Properties (CSS Variables) for Consistent Theming
+ * 
+ * This design system uses CSS custom properties to ensure consistent
+ * brand application across all interface components while enabling
+ * easy maintenance and potential theming capabilities.
+ */
 :root {
+    /* Primary Brand Color Palette */
     --brand-dark-teal: #1E2A2B;
+    /* Primary background - stability & trust */
     --brand-teal: #3A6B6F;
+    /* Secondary elements - professional depth */
     --brand-plum: #8B5A8C;
+    /* Accent color - security emphasis */
     --brand-orange: #F2A444;
+    /* Action elements - positive interaction */
     --brand-cream: #F5E8D7;
+    /* Primary text - optimal readability */
 
+    /* Semantic Color Assignments for Consistent Application */
     --text-color: var(--brand-cream);
+    /* Primary text ensuring high contrast */
     --text-muted: #a0a0a0;
+    /* Secondary text for less critical information */
     --panel-bg: #2a3a3b;
+    /* Card and panel backgrounds */
     --border-color: #4a5a5b;
+    /* Subtle borders and dividers */
     --hover-bg: #3a4a4b;
+    /* Interactive element hover states */
 }
 
+/**
+ * Global Body Styling with Brand Foundation
+ * 
+ * Establishes the core visual foundation with professional typography,
+ * brand-consistent background, and subtle texture suggesting the
+ * "protective fabric" metaphor of GrandmaGuard's security approach.
+ */
 body {
     font-family: 'Nunito', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     background-color: var(--brand-dark-teal);
     color: var(--text-color);
     margin: 0;
-    /* Subtle fabric texture for the "knitted" feel */
+
+    /* Subtle fabric texture pattern reinforcing the "knitted protection" brand concept */
     background-image: url("data:image/svg+xml,%3Csvg width='6' height='6' viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%232a3a3b' fill-opacity='0.4' fill-rule='evenodd'%3E%3Cpath d='M5 0h1L0 6V5zM6 5v1H5z'/%3E%3C/g%3E%3C/svg%3E");
 }
 
-/* --- Common Header --- */
+/**
+ * Header Navigation Component Styling
+ * 
+ * Professional navigation header providing brand identity, navigation
+ * links, and clear information hierarchy for the security dashboard.
+ */
 .header-nav {
     display: flex;
     align-items: center;
@@ -44,7 +122,7 @@ body {
     font-weight: 700;
     color: white;
     margin-right: auto;
-    /* Pushes nav links to the right */
+    /* Pushes navigation links to the right side */
 }
 
 .header-nav .brand-title small {

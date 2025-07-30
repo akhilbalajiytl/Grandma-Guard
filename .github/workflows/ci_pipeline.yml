@@ -1,71 +1,138 @@
-# .github/workflows/ci_pipeline.yml
+# ==============================================================================
+# GRANDMAGUARD CONTINUOUS INTEGRATION PIPELINE
+# ==============================================================================
+#
+# Purpose: Automated CI/CD pipeline for code quality and integration testing
+#
+# This workflow provides continuous integration for the GrandmaGuard security
+# scanning system. It automatically runs on code changes to ensure quality,
+# functionality, and security standards are maintained.
+#
+# Pipeline Stages:
+# 1. Code Quality (Linting) - Fast feedback on code style and syntax
+# 2. Integration Testing - Full application testing with containerized services
+#
+# Key Features:
+# - Automatic triggering on pushes and pull requests to master branch
+# - Multi-stage pipeline with dependency management (lint → test)
+# - Docker containerization for consistent testing environment
+# - Artifact collection for debugging and analysis
+# - Comprehensive test reporting and summaries
+# - Container registry caching for performance optimization
+#
+# Security Considerations:
+# - Isolated CI environment with non-production credentials
+# - Container isolation for security testing operations
+# - Safe handling of dummy API keys and test data
+#
+# Maintenance Notes:
+# - Keep Python version in sync with production Dockerfile
+# - Update linting rules and CI dependencies as needed
+# - Monitor cache effectiveness and adjust retention policies
+# - Review test coverage and add new test scenarios as needed
+# ==============================================================================
 
 name: LLM Safety Toolkit CI
 
-# This section defines WHEN the pipeline runs.
-# It will trigger on any push to the 'master' branch.
+# ==============================================================================
+# TRIGGER CONFIGURATION
+# ==============================================================================
+# Defines when this CI pipeline should execute automatically
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "master" ]     # Run on pushes to master branch
   pull_request:
-    branches: [ "master" ]
+    branches: [ "master" ]     # Run on pull requests targeting master
 
 jobs:
-  # --- JOB 1: LINTING ---
-  # This job is for fast code quality checks.
+  # ============================================================================
+  # JOB 1: CODE QUALITY AND LINTING
+  # ============================================================================
+  # Fast code quality checks to provide immediate feedback on code style,
+  # syntax errors, and basic quality issues before running expensive tests
   lint:
-    runs-on: ubuntu-latest  # Use a standard Linux runner
+    runs-on: ubuntu-latest
+    
     steps:
-      # Step 1: Check out the repository code so the runner has access to it.
+      # Step 1: Source Code Access
+      # Download repository content to the runner environment
       - name: Check out repository
         uses: actions/checkout@v4
 
-      # Step 2: Set up a Python environment.
+      # Step 2: Python Environment Setup
+      # Configure Python runtime matching production environment
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11' # Use the same Python version as your Dockerfile
+          python-version: '3.11'  # Keep in sync with Dockerfile Python version
 
-      # Step 3: Install dependencies needed for linting.
+      # Step 3: Linting Dependencies Installation
+      # Install only the tools needed for code quality checks
       - name: Install linting dependencies
         run: pip install flake8
 
-      # Step 4: Run the linter.
-      # The flake8 command will scan your 'app' directory for issues.
-      # If it finds any major errors, it will exit with a non-zero code, failing the job.
+      # Step 4: Code Quality Analysis
+      # Run flake8 linter to check for:
+      # - Syntax errors and undefined names
+      # - Code style violations (PEP 8)
+      # - Complexity issues and potential bugs
       - name: Run flake8 linter
         run: flake8 app
 
-  # --- JOB 2: INTEGRATION TEST ---
-  # This job runs your full application using Docker Compose.
+  # ============================================================================
+  # JOB 2: INTEGRATION TESTING
+  # ============================================================================
+  # Comprehensive integration testing using full containerized environment
+  # This job validates the complete application stack functionality
   integration-test:
     runs-on: ubuntu-latest
-    # This job will only run if the 'lint' job succeeds.
+    
+    # Job Dependencies: Only run if linting passes
+    # This ensures we don't waste resources on broken code
     needs: lint
     
-    # We need to grant permissions for the token used in the docker/login-action
+    # Required Permissions for Container Operations
     permissions:
-      contents: read
-      packages: write
+      contents: read      # Read repository content
+      packages: write     # Write to GitHub Container Registry for caching
 
-    # Define the environment variables for the job, just like in the manual workflow.
+    # Environment Configuration for CI Testing
+    # Uses separate CI-specific values to isolate from staging/production
     env:
-      CI: true
+      CI: true                    # Flag to enable CI-specific behavior
+      
+      # MySQL Database Configuration (CI Environment)
       MYSQL_USER: ci_user
       MYSQL_PASSWORD: ci_password
       MYSQL_DATABASE: ci_db
       MYSQL_ROOT_PASSWORD: ci_root_password
+      
+      # Cache and Build Configuration
       HF_CACHE_PATH: /home/runner/.cache/huggingface
+      
+      # Docker Image Tagging Strategy for CI
+      # Separate namespace to avoid conflicts with staging/production
       WEBAPP_IMAGE_OVERRIDE: llm-safety-toolkit-ci:ci-${{ github.run_id }}
       CACHE_IMAGE_PATH: ghcr.io/${{ github.repository_owner }}/llm-safety-toolkit-ci
 
     steps:
+      # ==================================================================
+      # STEP 1: SOURCE CODE CHECKOUT
+      # ==================================================================
       - name: Check out repository
         uses: actions/checkout@v4
 
+      # ==================================================================
+      # STEP 2: REPORTS DIRECTORY SETUP
+      # ==================================================================
+      # Ensure output directory exists for CI artifacts
       - name: Create Reports Directory
         run: mkdir -p ./reports_output
 
+      # ==================================================================
+      # STEP 3: HUGGING FACE MODEL CACHING
+      # ==================================================================
+      # Cache ML models with CI-specific cache key to avoid conflicts
       - name: Cache Hugging Face models
         uses: actions/cache@v4
         with:
@@ -74,9 +141,15 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-hf-ci-
 
+      # ==================================================================
+      # STEP 4: DOCKER BUILDX SETUP
+      # ==================================================================
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      # ==================================================================
+      # STEP 5: CONTAINER REGISTRY AUTHENTICATION
+      # ==================================================================
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -84,31 +157,42 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # ==================================================================
+      # STEP 6: DOCKER IMAGE BUILD AND CACHE
+      # ==================================================================
+      # Build application image with CI-specific caching strategy
       - name: Build and Cache Docker image
         uses: docker/build-push-action@v5
         with:
-            context: .
-            target: production
-            push: false
-            load: true
-            tags: ${{ env.WEBAPP_IMAGE_OVERRIDE }}
+            context: .                                     # Build context
+            target: production                             # Dockerfile target stage
+            push: false                                    # Don't push image to registry
+            load: true                                     # Load into local Docker daemon
+            tags: ${{ env.WEBAPP_IMAGE_OVERRIDE }}       # CI-specific image tag
+            # Registry cache configuration for CI performance
             cache-from: type=registry,ref=${{ env.CACHE_IMAGE_PATH }}:buildcache
             cache-to: type=registry,ref=${{ env.CACHE_IMAGE_PATH }}:buildcache,mode=max
 
-      # --- THIS IS THE FIX ---
-      # Use both compose files to start ALL services (webapp and db).
-      # This ensures the 'db' service is defined and available.
+      # ==================================================================
+      # STEP 7: CONTAINERIZED SERVICES STARTUP
+      # ==================================================================
+      # Start all required services (webapp + database) using compose files
+      # This creates the complete testing environment
       - name: Start Services
         run: docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d
         env:
           WEBAPP_IMAGE_OVERRIDE: ${{ env.WEBAPP_IMAGE_OVERRIDE }}
 
-      # The wait step is still valid, but we need to ensure it has the override env var
+      # ==================================================================
+      # STEP 8: SERVICE READINESS VERIFICATION
+      # ==================================================================
+      # Wait for database to be fully ready before running tests
+      # This prevents race conditions and connection failures
       - name: Wait for services to be ready
         run: |
           echo "Waiting for database to be ready..."
           i=0
-          # We use 'run' here to create a temporary container for the check
+          # Use temporary container to check database connectivity
           while ! docker compose -f docker-compose.yml run --rm webapp sh -c 'nc -z db 3306' >/dev/null 2>&1; do
             i=$((i+1))
             if [ $i -ge 12 ]; then
@@ -123,13 +207,16 @@ jobs:
         env:
             WEBAPP_IMAGE_OVERRIDE: ${{ env.WEBAPP_IMAGE_OVERRIDE }}
 
-      # Now we use 'exec' to run the command inside the already-running 'webapp' container.
-      # We add the volume mount to this 'exec' command to save the report.
+      # ==================================================================
+      # STEP 9: CI SECURITY SCAN EXECUTION
+      # ==================================================================
+      # Execute security scan using test model and dummy credentials
+      # This validates the core functionality without external API dependencies
       - name: Run CLI scan against a test model
         run: |
           set -o pipefail
-          # Use 'exec' to run a command inside the long-running 'webapp' service container.
-          # We add the volume mount here so the report is saved to the host.
+          # Execute scan inside running webapp container
+          # Uses dummy/test endpoints to avoid external dependencies in CI
           docker compose -f docker-compose.yml exec -T \
             -e CI=true \
             -e DATABASE_URL="sqlite:///ci_scan_results.db" \
@@ -144,28 +231,36 @@ jobs:
         env:
             WEBAPP_IMAGE_OVERRIDE: ${{ env.WEBAPP_IMAGE_OVERRIDE }}
 
-      # --- NEW: Upload the report artifact ---
+      # ==================================================================
+      # STEP 10: CI ARTIFACT COLLECTION
+      # ==================================================================
+      # Upload scan results for debugging and analysis
+      # Runs even if scan fails to help with troubleshooting
       - name: Upload Scan Report Artifact
         uses: actions/upload-artifact@v4
-        if: always() # Upload even if the scan step fails, to help with debugging
+        if: always()  # Upload even if the scan step fails, to help with debugging
         with:
           name: ci-scan-report
-          # The report is now at /app/reports inside the container, but we need to copy it out.
-          # A simpler way is to just grab the log file for CI.
-          # If a full report is needed, we would need to 'docker cp' the file out.
-          # For now, let's keep it simple and upload the log.
+          # Upload scan log for CI analysis
+          # Full reports would require additional container file copying
           path: ci_scan_output.log
           retention-days: 7
       
-      # This 'Publish Test Summary' step will now work correctly
+      # ==================================================================
+      # STEP 11: CI TEST SUMMARY GENERATION
+      # ==================================================================
+      # Create formatted test summary for GitHub Actions UI
+      # Provides quick visibility into CI test results
       - name: Publish Test Summary
-        # This step only runs if the scan step before it succeeded
-        if: success()
+        if: success()  # Only run if all previous steps succeeded
         run: |
+          # Extract security score from scan output
           score_line=$(grep 'Score:' ci_scan_output.log | tail -n 1)
           if [ -z "$score_line" ]; then
               score_line="Score: Not found"
           fi
+          
+          # Generate GitHub Actions summary report
           echo "### 🛡️ LLM Safety Toolkit: Integration Test" >> $GITHUB_STEP_SUMMARY
           echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
           echo "**Result:** ✅ CI Scan Completed" >> $GITHUB_STEP_SUMMARY
@@ -178,6 +273,10 @@ jobs:
           echo '```' >> $GITHUB_STEP_SUMMARY
           echo "</details>" >> $GITHUB_STEP_SUMMARY
 
+      # ==================================================================
+      # STEP 12: FAILURE DEBUGGING AND DIAGNOSTICS
+      # ==================================================================
+      # Display container logs when CI fails for debugging
       - name: Display container logs on failure
         if: failure()
         run: docker compose logs

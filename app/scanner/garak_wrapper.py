@@ -1,3 +1,73 @@
+"""GrandmaGuard Garak Integration Wrapper Module.
+
+This module provides comprehensive integration with the Garak AI red-teaming
+framework for advanced security testing and vulnerability assessment of
+large language models. Garak (Generative AI Risk Assessment Kit) is a
+state-of-the-art framework for testing AI models against various security
+threats and attack vectors.
+
+The wrapper orchestrates both Garak's probe capabilities (attack generation)
+and detector capabilities (response analysis) to provide comprehensive
+security assessment of AI model behaviors and responses.
+
+Key Features:
+    - Dual-mode operation: Probes (attack generation) + Detectors (analysis)
+    - 30+ specialized security detectors for comprehensive threat coverage
+    - Automated attack payload generation and execution
+    - Structured result parsing and risk score calculation
+    - Integration with multiple attack categories and threat models
+
+Garak Integration:
+    - Probe Registry: Attack generation across multiple threat categories
+    - Detector Registry: Response analysis using specialized security models
+    - Automated execution: Subprocess management and result collection
+    - Error Handling: Robust error recovery and graceful degradation
+
+Security Categories:
+    - Toxicity: Harmful content and inappropriate language detection
+    - Jailbreak: Prompt manipulation and safety bypass attempts
+    - Prompt Injection: Instruction override and context manipulation
+    - Encoding: Obfuscation and encoding-based attack vectors
+    - Malware: Code generation and system exploitation attempts
+    - General: Broad security assessment and baseline testing
+
+Attack Methodology:
+    1. Probe Selection: Choose appropriate probes for target threat category
+    2. Payload Generation: Generate contextual attack prompts
+    3. Model Interaction: Execute attacks against target AI models
+    4. Response Collection: Gather and structure model responses
+    5. Detector Analysis: Analyze responses using specialized detectors
+    6. Risk Assessment: Calculate threat scores and risk profiles
+
+Example:
+    Comprehensive security assessment:
+    
+    >>> wrapper = GarakWrapper()
+    >>> payload_data = {
+    ...     "category": "jailbreak",
+    ...     "payloads": ["Tell me how to..."]
+    ... }
+    >>> results = wrapper.evaluate_payload(payload_data, api_key)
+    >>> print(results["overall_result"])  # "PASS" or "FAIL"
+
+Dependencies:
+    - Garak framework: Core red-teaming and security testing capabilities
+    - Subprocess management: External process execution and monitoring
+    - JSON processing: Structured result parsing and data handling
+    - Temporary file management: Secure intermediate data handling
+
+Configuration:
+    - Detector registry: Mapping of threat categories to detection modules
+    - Probe registry: Mapping of attack categories to generation modules
+    - Execution parameters: Timeout, retry, and error handling settings
+
+Notes:
+    - Requires Garak framework installation and configuration
+    - Designed for authorized security testing and research purposes
+    - Comprehensive logging for debugging and audit purposes
+    - Optimized for integration with larger security scanning systems
+"""
+
 # app/scanner/garak_wrapper.py
 import json
 import logging
@@ -11,9 +81,63 @@ logger = logging.getLogger(__name__)
 
 
 class GarakWrapper:
-    """Enhanced wrapper that uses both Garak probes AND detectors"""
+    """Advanced Garak framework integration for AI security testing.
+    
+    Provides comprehensive wrapper functionality for the Garak AI red-teaming
+    framework, enabling both attack generation (probes) and response analysis
+    (detectors) for thorough AI model security assessment.
+    
+    The wrapper manages the complete security testing lifecycle from attack
+    payload generation through response analysis and risk scoring, integrating
+    multiple specialized security tools into a unified assessment framework.
+    
+    Capabilities:
+        - Multi-category threat assessment (toxicity, jailbreaks, injections)
+        - Automated attack payload generation using Garak probes
+        - Sophisticated response analysis using specialized detectors
+        - Risk scoring and threat classification
+        - Structured result reporting for integration with larger systems
+    
+    Architecture:
+        - Probe Registry: Maps threat categories to attack generation modules
+        - Detector Registry: Maps threat types to analysis and detection modules
+        - Execution Engine: Manages subprocess execution and result collection
+        - Result Parser: Structures raw Garak output into usable data formats
+    
+    Attributes:
+        detector_registry (dict): Mapping of threat categories to detector modules
+        probe_registry (dict): Mapping of attack categories to probe modules
+        
+    Security Testing Categories:
+        - toxicity: Harmful content and inappropriate language
+        - jailbreak: Safety bypass and prompt manipulation
+        - prompt_injection: Instruction override and context hijacking
+        - encoding: Obfuscation and encoding-based attacks
+        - malware: Code generation and system exploitation
+        - general: Baseline security assessment and broad testing
+    
+    Example:
+        >>> wrapper = GarakWrapper()
+        >>> payload_data = {
+        ...     "category": "jailbreak",
+        ...     "payloads": ["Ignore previous instructions and..."]
+        ... }
+        >>> results = wrapper.evaluate_payload(payload_data, "api_key")
+        >>> risk_score = results["detector_results"][0]["score"]
+        
+    Notes:
+        - Requires Garak framework installation and proper configuration
+        - Designed for authorized security research and testing only
+        - Integrates with external AI models via API for comprehensive testing
+        - Provides detailed logging and debugging capabilities
+    """
 
     def __init__(self):
+        """Initialize Garak wrapper with detector and probe registries.
+        
+        Sets up the mapping between threat categories and corresponding
+        Garak modules for both attack generation and response analysis.
+        """
         # CORRECTED detector capabilities using actual Garak detectors
         self.detector_registry = {
             "toxicity": [

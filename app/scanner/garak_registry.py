@@ -1,3 +1,38 @@
+"""
+GrandmaGuard Garak Detector Registry Module
+
+This module implements a comprehensive registry system for managing Garak
+security detectors and probes within the GrandmaGuard scanning framework.
+The registry provides dynamic discovery, capability mapping, and intelligent
+selection of appropriate security detectors based on threat categories.
+
+Core Functionality:
+- Dynamic detector/probe discovery and instantiation
+- Capability-based detector selection for specific threat types
+- Comprehensive mapping of detector categories to security domains
+- Performance optimization through detector caching
+- Flexible configuration for custom detector integration
+
+Security Coverage Areas:
+- Toxicity & Hate Speech: Content safety and harmful language detection
+- Prompt Injection & Jailbreaking: Safety mechanism bypass attempts
+- Code & Exploitation: Malicious code generation and injection attacks
+- Data Leakage & Privacy: PII extraction and information disclosure
+- Misinformation & Misleading: False information and contradiction detection
+- XSS & Web Security: Cross-site scripting and web-based attacks
+- Encoding & Obfuscation: Evasion techniques and encoded payloads
+
+The registry enables intelligent threat detection by automatically selecting
+the most appropriate detectors for specific security assessment scenarios,
+optimizing both coverage and performance in production environments.
+
+Classes:
+    GarakDetectorRegistry: Main registry for detector management and selection
+
+Author: GrandmaGuard Security Team
+License: MIT
+"""
+
 # app/scanner/garak_registry.py
 import importlib
 import logging
@@ -7,7 +42,36 @@ logger = logging.getLogger(__name__)
 
 
 class GarakDetectorRegistry:
-    """Registry for managing Garak detectors and their capabilities"""
+    """
+    Registry for managing Garak security detectors and their capabilities.
+    
+    This class provides a centralized registry for discovering, instantiating,
+    and managing Garak security detectors and probes. It maintains comprehensive
+    mappings between detector names and their security capabilities, enabling
+    intelligent selection of appropriate detectors for specific threat scenarios.
+    
+    The registry implements caching to avoid repeated instantiation of expensive
+    detector models and provides flexible querying capabilities for both exact
+    detector names and capability-based selection.
+    
+    Key Features:
+    - Dynamic detector discovery and instantiation from module paths
+    - Capability-based detector selection for threat-specific scanning
+    - Performance optimization through intelligent caching
+    - Comprehensive security domain coverage mapping
+    - Support for both built-in and custom detector integration
+    
+    Attributes:
+        detector_cache (dict): Cache of instantiated detector objects
+        detector_capabilities (dict): Mapping of detector names to capability tags
+        probe_capabilities (dict): Mapping of probe names to capability tags
+    
+    Example:
+        >>> registry = GarakDetectorRegistry()
+        >>> toxicity_detectors = registry.get_detectors_by_capability(['toxicity'])
+        >>> jailbreak_detectors = registry.get_detectors_by_capability(['jailbreak'])
+        >>> detector = registry.get_detector('dan.DAN')
+    """
 
     def __init__(self):
         self.detector_cache = {}

@@ -1,3 +1,66 @@
+"""GrandmaGuard Main Flask Routes Module.
+
+This module defines the core Flask web routes for the GrandmaGuard AI security scanning
+application. It provides both web interface endpoints for human interaction and API
+endpoints for programmatic access to scanning functionality.
+
+Key Features:
+    - Web Interface Routes: Dashboard, scan management, result visualization
+    - REST API Endpoints: Results retrieval, manual review handling, data export
+    - LLM Proxy Endpoint: Real-time AI safety scanning and response filtering
+    - Runtime Monitoring: Logging and audit trail functionality
+
+Route Categories:
+    1. Web Interface Routes:
+        - / : Main dashboard displaying test runs and results
+        - /compare : Comparison interface for multiple test runs
+        - /runtime-logs : View real-time scanning and security events
+    
+    2. API Endpoints:
+        - /api/results/<run_id> : Retrieve detailed test results with charts
+        - /api/review/<result_id> : Manual review and status updates
+        - /api/export/<run_id> : CSV export functionality
+    
+    3. Proxy Endpoints:
+        - /proxy/v1/chat/completions : OpenAI-compatible safety proxy
+
+Data Flow:
+    1. Users initiate scans via web interface (/run endpoint)
+    2. Background scanner processes prompts and generates results
+    3. Results are stored in database and displayed via API endpoints
+    4. Manual review allows human oversight and status corrections
+    5. Proxy endpoint provides real-time filtering for live applications
+
+Security Features:
+    - Real-time prompt injection detection
+    - Multi-layer scanning with various AI safety tools
+    - Manual review capability for edge cases
+    - Comprehensive audit logging for compliance
+
+Dependencies:
+    - Flask: Web framework and request handling
+    - SQLAlchemy: Database ORM for result persistence
+    - Pandas: Data manipulation for exports
+    - Scanner Engine: Background processing for security scans
+
+Example:
+    Start a new security scan:
+    
+    >>> POST /run
+    >>> {
+    ...     "scan_name": "Test Campaign",
+    ...     "api_endpoint": "https://api.openai.com/v1/chat/completions",
+    ...     "api_key": "sk-...",
+    ...     "api_model_identifier": "gpt-3.5-turbo"
+    ... }
+
+Notes:
+    - All routes include proper error handling and validation
+    - Database sessions are managed automatically via Flask context
+    - Proxy endpoint supports async processing for real-time filtering
+    - Export functionality supports CSV format for external analysis
+"""
+
 # app/main.py
 import os
 
@@ -16,12 +79,46 @@ from .scanner.runtime_scanner import scan_and_respond_in_realtime
 # --- Routes ---
 @app.route("/")
 def index():
+    """Render the main dashboard page with recent test runs.
+    
+    Displays the GrandmaGuard dashboard showing all test runs ordered by
+    most recent first. Provides navigation to view detailed results and
+    start new scans.
+    
+    Returns:
+        str: Rendered HTML template with test runs data
+        
+    Template Variables:
+        runs (List[TestRun]): List of all test runs ordered by timestamp desc
+    """
     runs = db_session.query(TestRun).order_by(TestRun.timestamp.desc()).all()
     return render_template("index.html", runs=runs)
 
 
 @app.route("/run", methods=["POST"])
 def run_new_scan():
+    """Initiate a new AI security scan with specified parameters.
+    
+    Creates a new test run in the database and starts a background scanning
+    thread to process security tests against the specified AI model endpoint.
+    
+    Form Parameters:
+        scan_name (str): Human-readable name for the scan campaign
+        api_model_identifier (str): Model identifier (e.g., "gpt-3.5-turbo")
+        api_endpoint (str): Target API endpoint URL
+        api_key (str): API key for authentication with target service
+    
+    Returns:
+        Response: Redirect to index page on success, error message on failure
+        
+    Raises:
+        400: If any required fields are missing
+        
+    Side Effects:
+        - Creates new TestRun record in database
+        - Starts background scanning thread
+        - Redirects user to dashboard to monitor progress
+    """
     scan_name = request.form["scan_name"]
     api_model_identifier = request.form["api_model_identifier"]
     api_endpoint = request.form["api_endpoint"]
@@ -46,6 +143,57 @@ def run_new_scan():
 
 @app.route("/api/results/<int:run_id>")
 def api_results(run_id):
+    """Retrieve detailed test results and analytics for a specific run.
+    
+    Returns comprehensive test results including aggregated statistics by OWASP
+    category, chart data for visualization, and detailed individual test results.
+    
+    Args:
+        run_id (int): Database ID of the test run to retrieve
+        
+    Returns:
+        JSON: Structured response containing:
+            - scan_name: Human-readable scan identifier
+            - overall_score: Percentage of tests that passed (0.0-1.0)
+            - chart_data: Chart.js compatible data for status visualization
+            - detailed_results: Array of individual test results with metadata
+            
+    Response Format:
+        {
+            "scan_name": "Campaign Name",
+            "overall_score": 0.85,
+            "chart_data": {
+                "labels": ["LLM01", "LLM02", ...],
+                "datasets": [
+                    {"label": "PASS", "data": [...], "backgroundColor": "..."},
+                    {"label": "FAIL", "data": [...], "backgroundColor": "..."},
+                    ...
+                ]
+            },
+            "detailed_results": [
+                {
+                    "id": 123,
+                    "owasp_category": "LLM01",
+                    "status": "PASS",
+                    "garak_status": "pass",
+                    "llama_guard_status": "safe",
+                    "judge_status": "approved",
+                    "payload": "Test prompt...",
+                    "response": "Model response..."
+                },
+                ...
+            ]
+        }
+        
+    Status Codes:
+        200: Successful retrieval
+        404: Test run not found
+        
+    Notes:
+        - Chart data includes PASS, FAIL, PENDING_REVIEW, and ERROR statuses
+        - Results are grouped by OWASP AI security categories
+        - Overall score excludes pending/error results from calculation
+    """
     run = db_session.query(TestRun).get(run_id)
     if not run:
         return jsonify({"error": "Run not found"}), 404
@@ -119,6 +267,42 @@ def api_results(run_id):
 
 @app.route("/api/review/<int:result_id>", methods=["POST"])
 def handle_review(result_id):
+    """Handle manual review and status updates for individual test results.
+    
+    Allows human reviewers to override automated test results, useful for
+    handling edge cases or false positives/negatives in AI safety detection.
+    
+    Args:
+        result_id (int): Database ID of the test result to update
+        
+    JSON Parameters:
+        status (str): New status, must be either "PASS" or "FAIL"
+        
+    Returns:
+        JSON: Response indicating success/failure and updated metrics
+        
+    Response Format:
+        {
+            "success": true,
+            "message": "Result 123 updated to PASS",
+            "new_run_score": 0.87
+        }
+        
+    Status Codes:
+        200: Successfully updated
+        400: Invalid status provided
+        404: Test result not found
+        
+    Side Effects:
+        - Updates individual test result status
+        - Recalculates overall test run score
+        - Commits changes to database
+        
+    Notes:
+        - Only accepts "PASS" or "FAIL" statuses for human review
+        - Overall score is recalculated excluding pending/error results
+        - Changes are immediately persisted to database
+    """
     data = request.get_json()
     new_status = data.get("status")
 
@@ -157,6 +341,21 @@ def handle_review(result_id):
 
 @app.route("/compare")
 def compare_page():
+    """Render the test run comparison interface.
+    
+    Provides a web interface for comparing results between multiple test runs,
+    allowing users to track improvements or regressions over time.
+    
+    Returns:
+        str: Rendered HTML template with comparison interface
+        
+    Template Variables:
+        runs (List[TestRun]): All available test runs for selection
+        
+    Notes:
+        - Runs are ordered by most recent first for user convenience
+        - Comparison logic is handled client-side via JavaScript
+    """
     # Fetch all runs to populate the dropdowns, most recent first
     all_runs = db_session.query(TestRun).order_by(TestRun.timestamp.desc()).all()
     return render_template("compare.html", runs=all_runs)
@@ -164,6 +363,38 @@ def compare_page():
 
 @app.route("/api/export/<int:run_id>")
 def export_csv(run_id):
+    """Export test results to CSV format for external analysis.
+    
+    Generates a downloadable CSV file containing all test results for the
+    specified run, suitable for import into spreadsheet applications or
+    data analysis tools.
+    
+    Args:
+        run_id (int): Database ID of the test run to export
+        
+    Returns:
+        Response: CSV file download with appropriate headers
+        
+    CSV Columns:
+        - Category: OWASP AI security category
+        - Status: Final test result (PASS/FAIL/ERROR/PENDING_REVIEW)
+        - Judge: AI judge assessment result
+        - Payload: Original test prompt
+        - Response: Model's response to the test prompt
+        
+    Status Codes:
+        200: Successful export
+        404: Test run not found
+        
+    Headers:
+        - Content-Type: text/csv
+        - Content-Disposition: attachment with filename pattern run_{id}_{name}.csv
+        
+    Notes:
+        - Uses pandas for reliable CSV generation
+        - Filename includes run ID and scan name for easy identification
+        - All text fields are properly escaped for CSV format
+    """
     run = db_session.query(TestRun).get(run_id)
     if not run:
         return "Run not found", 404
@@ -199,9 +430,61 @@ def export_csv(run_id):
 # --- THE LLM FIREWALL/PROXY ENDPOINT ---
 @app.route("/proxy/v1/chat/completions", methods=["POST"])
 async def proxy_chat_completions():
-    """
-    This endpoint acts as a drop-in replacement for the OpenAI API.
-    It intercepts the request, scans it, and then returns a response.
+    """OpenAI-compatible proxy endpoint with real-time AI safety scanning.
+    
+    Acts as a drop-in replacement for OpenAI's chat completions API while
+    providing real-time security scanning and response filtering. Intercepts
+    requests, scans for security threats, and returns filtered responses.
+    
+    Request Format:
+        Compatible with OpenAI chat completions API:
+        {
+            "model": "gpt-3.5-turbo",
+            "messages": [
+                {"role": "user", "content": "User prompt here"}
+            ],
+            ...
+        }
+    
+    Returns:
+        JSON: OpenAI-compatible response with security-filtered content
+        
+    Response Format:
+        {
+            "id": "chatcmpl-proxy-123",
+            "object": "chat.completion",
+            "created": 1234567890,
+            "model": "gpt-3.5-turbo",
+            "choices": [{
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": "Filtered response content"
+                },
+                "finish_reason": "stop"
+            }]
+        }
+    
+    Environment Variables Required:
+        TARGET_API_ENDPOINT: Downstream LLM API endpoint
+        TARGET_LLM_API_KEY: API key for downstream service
+        
+    Status Codes:
+        200: Successful processing and response
+        400: Invalid request format or missing user prompt
+        500: Server configuration error
+        
+    Security Features:
+        - Real-time prompt injection detection
+        - Multi-layer scanning (Garak, LlamaGuard, AI Judge)
+        - Response filtering and sanitization
+        - Comprehensive audit logging
+        
+    Notes:
+        - Fully compatible with OpenAI API clients
+        - Async processing for minimal latency impact
+        - Transparent to end users while providing security
+        - Uses environment configuration for target LLM routing
     """
     request_data = request.get_json()
     if not request_data or "messages" not in request_data:
@@ -255,9 +538,25 @@ async def proxy_chat_completions():
     )
 
 
-# --- NEW: A simple page to view the runtime logs ---
 @app.route("/runtime-logs")
 def runtime_logs_page():
+    """Display recent runtime logs and security events.
+    
+    Provides a web interface for monitoring real-time security scanning
+    activities, including proxy requests, scan results, and system events.
+    
+    Returns:
+        str: Rendered HTML template with recent log entries
+        
+    Template Variables:
+        logs (List[RuntimeLog]): Recent log entries (limited to 100 most recent)
+        
+    Notes:
+        - Logs are ordered by most recent first
+        - Limited to 100 entries for performance
+        - Useful for debugging and monitoring security activity
+        - Shows real-time scanning and proxy activities
+    """
     logs = (
         db_session.query(RuntimeLog)
         .order_by(RuntimeLog.timestamp.desc())

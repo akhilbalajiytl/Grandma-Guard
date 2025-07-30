@@ -1,4 +1,38 @@
-# interactive_test.py
+"""Interactive Testing Interface for GrandmaGuard SmartClassifier.
+
+This module provides an interactive command-line interface for testing the
+GrandmaGuard SmartClassifier in real-time. It allows security researchers and
+developers to manually test prompts against the classification system and
+observe the results immediately.
+
+The script initializes the SmartClassifier with GPU acceleration (if available)
+and provides a simple REPL (Read-Eval-Print Loop) for prompt testing. It's
+designed for ad-hoc testing, debugging, and validation of the classifier's
+behavior on specific inputs.
+
+Features:
+    - Real-time prompt classification testing
+    - GPU acceleration detection and validation
+    - Error handling for individual classification attempts
+    - Interactive command-line interface
+    - Graceful shutdown with quit/exit commands
+
+Example:
+    Run the interactive tester:
+        python interactive_test.py
+    
+    Then enter prompts at the prompt to see classification results.
+
+Requirements:
+    - CUDA-compatible GPU for optimal performance
+    - Trained SmartClassifier model available
+    - Proper environment configuration
+
+Note:
+    This script must be run from the project root directory to ensure
+    proper module path resolution for the app package.
+"""
+
 import torch
 import os
 from dotenv import load_dotenv
@@ -18,8 +52,27 @@ os.environ['DATABASE_URL'] = 'sqlite:///dummy.db'
 from app.scanner.smart_classifier import SmartClassifier
 
 def main():
-    """
-    Main function to run the interactive test loop.
+    """Run the interactive testing loop for the SmartClassifier.
+    
+    This function provides the main interactive interface for testing prompts
+    against the GrandmaGuard classification system. It:
+    
+    1. Checks for CUDA GPU availability
+    2. Initializes the SmartClassifier model
+    3. Provides a command-line interface for prompt testing
+    4. Handles errors gracefully during classification
+    5. Allows graceful exit with 'quit' or 'exit' commands
+    
+    The function runs in a continuous loop, accepting user input and
+    displaying classification results until the user chooses to exit.
+    
+    Raises:
+        SystemExit: If CUDA is not available when GPU acceleration is required
+        Exception: If classifier initialization fails
+        
+    Note:
+        Individual classification errors are caught and displayed without
+        terminating the interactive session.
     """
     print("--- Grandma Guard: Interactive SmartClassifier Test ---")
     
@@ -59,4 +112,9 @@ def main():
         traceback.print_exc()
 
 if __name__ == "__main__":
+    """Main execution block for the interactive classifier testing interface.
+    
+    Executes the main testing loop when the script is run directly,
+    providing an interactive interface for testing the SmartClassifier.
+    """
     main()

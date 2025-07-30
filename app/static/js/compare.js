@@ -1,6 +1,61 @@
+/**
+ * GrandmaGuard Security Scan Comparison JavaScript Module
+ * 
+ * This module provides side-by-side comparison functionality for analyzing
+ * multiple security scan results within the GrandmaGuard dashboard. It enables
+ * security analysts to compare AI model performance across different scans,
+ * configurations, or time periods for comprehensive security assessment.
+ * 
+ * Core Features:
+ * - Parallel loading and display of multiple security scan results
+ * - Side-by-side comparison visualization for easy analysis
+ * - Statistical summary generation for quick security posture assessment
+ * - Detailed result breakdown with status categorization
+ * - Responsive UI updates with loading states and error handling
+ * 
+ * Comparison Capabilities:
+ * - Security test pass/fail rate analysis
+ * - OWASP category performance comparison
+ * - Multi-tool assessment result correlation
+ * - Temporal security posture tracking
+ * - Model-to-model security effectiveness comparison
+ * 
+ * Use Cases:
+ * - A/B testing of different AI model configurations
+ * - Security posture trending over time
+ * - Effectiveness validation of security improvements
+ * - Compliance reporting with comparative analysis
+ * 
+ * @author GrandmaGuard Security Team
+ * @license MIT
+ */
+
 // app/static/js/compare.js
 
-// This function will run when the page loads or when a selection changes
+/**
+ * Load and display side-by-side comparison of two security scan results.
+ * 
+ * This function orchestrates the parallel loading and rendering of two
+ * security scan results for comparative analysis. It manages the complete
+ * workflow from data fetching to UI updates, providing a comprehensive
+ * side-by-side view for security assessment comparison.
+ * 
+ * The function handles:
+ * - Parallel data fetching for optimal performance
+ * - Loading state management with user feedback
+ * - Error handling and graceful degradation
+ * - Synchronized rendering of comparison results
+ * 
+ * @async
+ * @example
+ * // Load comparison when page loads
+ * document.addEventListener('DOMContentLoaded', loadComparison);
+ * 
+ * @example
+ * // Load comparison when user changes selection
+ * document.getElementById('runA').addEventListener('change', loadComparison);
+ * document.getElementById('runB').addEventListener('change', loadComparison);
+ */
 async function loadComparison() {
     const runA_id = document.getElementById('runA').value;
     const runB_id = document.getElementById('runB').value;

@@ -1,6 +1,0 @@
-plugins:
-  generators:
-    nim:
-      uri: "https://rytmodel.ytlailabs.tech/v1/"
-      context_len: 32768
-      api_key: "641b2060e6f64f57b5f598d79367d115.y5NcTInISvYgOTc9"

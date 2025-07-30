@@ -1,3 +1,37 @@
+"""
+GrandmaGuard Security Report Generation Module
+
+This module provides comprehensive HTML report generation capabilities for
+GrandmaGuard security scanning results. It transforms raw security assessment
+data into professional, self-contained HTML reports suitable for stakeholders,
+compliance documentation, and security audit trails.
+
+Core Functionality:
+- Professional HTML report generation using Jinja2 templating
+- Self-contained reports with embedded CSS and JavaScript
+- Comprehensive security assessment visualization
+- Support for multiple report formats and customization options
+- Integration with GrandmaGuard database models for seamless data access
+
+Report Features:
+- Executive summary with key security findings
+- Detailed threat analysis with risk categorization
+- Interactive charts and visualizations
+- Compliance mapping to security frameworks
+- Recommendations and remediation guidance
+- Audit trail with complete test execution details
+
+The report generator supports various stakeholder needs from executive
+briefings to technical deep-dives, ensuring security findings are
+communicated effectively across organizational levels.
+
+Classes:
+    ReportGenerator: Main report generation engine with template management
+
+Author: GrandmaGuard Security Team
+License: MIT
+"""
+
 import os
 
 from jinja2 import Environment, FileSystemLoader
@@ -6,12 +40,47 @@ from ...models import TestRun
 
 
 class ReportGenerator:
+    """
+    Professional HTML report generator for GrandmaGuard security assessments.
+    
+    This class provides comprehensive report generation capabilities, transforming
+    raw security scanning results into professional HTML reports. The generator
+    uses Jinja2 templating for flexible report customization and supports
+    various output formats and styling options.
+    
+    The report generator integrates seamlessly with GrandmaGuard's database
+    models, extracting detailed security assessment data and presenting it
+    in an accessible, visually appealing format suitable for both technical
+    and executive audiences.
+    
+    Key Features:
+    - Jinja2-based templating for flexible report customization
+    - Self-contained HTML output with embedded resources
+    - Professional styling with responsive design
+    - Comprehensive security data visualization
+    - Multi-stakeholder report variants
+    
+    Attributes:
+        env (Environment): Jinja2 environment for template processing
+        template: Loaded HTML template for report generation
+    
+    Example:
+        >>> generator = ReportGenerator("templates/")
+        >>> generator.generate_html_report(test_run, "gpt-4", "report.html")
+    """
+    
     def __init__(self, template_dir="app/scanner/reporting"):
         """
-        Initializes the report generator.
+        Initialize report generator with template configuration.
+        
+        Sets up the Jinja2 templating environment and loads the main report
+        template for HTML generation. The template directory should contain
+        all necessary template files and assets for report generation.
 
         Args:
-            template_dir (str): The directory where the report templates are stored.
+            template_dir (str): Directory path containing report templates.
+                              Defaults to "app/scanner/reporting" for standard
+                              GrandmaGuard installation layout.
         """
         # Set up Jinja2 environment
         self.env = Environment(loader=FileSystemLoader(template_dir))
@@ -21,12 +90,39 @@ class ReportGenerator:
         self, test_run: TestRun, model_identifier: str, output_path: str
     ):
         """
-        Generates a self-contained HTML report from a TestRun object.
+        Generate comprehensive HTML security assessment report.
+        
+        Creates a professional, self-contained HTML report from GrandmaGuard
+        security scanning results. The report includes executive summary,
+        detailed findings, risk analysis, and recommendations for stakeholders
+        across technical and business domains.
+        
+        The generated report is fully self-contained with embedded CSS and
+        JavaScript, making it suitable for sharing and archiving without
+        external dependencies. The report format is optimized for both
+        screen viewing and printing.
 
         Args:
-            test_run (TestRun): The completed TestRun object from the database.
-            model_identifier (str): The specific model identifier used for the scan (e.g., 'gpt-3.5-turbo').
-            output_path (str): The path where the HTML report file will be saved.
+            test_run (TestRun): Completed TestRun database object containing
+                              all security assessment results, including scan
+                              metadata, test results, and risk classifications.
+            model_identifier (str): Specific AI model identifier that was tested
+                                  (e.g., 'gpt-4', 'claude-3', 'llama-2-70b').
+                                  Used for report title and model-specific analysis.
+            output_path (str): File system path where the HTML report will be saved.
+                             Should include the desired filename with .html extension.
+        
+        Example:
+            >>> test_run = TestRun.query.filter_by(id=123).first()
+            >>> generator.generate_html_report(
+            ...     test_run, 
+            ...     "gpt-4-turbo",
+            ...     "/reports/security_assessment_2024.html"
+            ... )
+        
+        Note:
+            The output file will be overwritten if it already exists. Ensure
+            the output directory has appropriate write permissions.
         """
         results_by_owasp = {}
         # Define the statuses we care about for the chart

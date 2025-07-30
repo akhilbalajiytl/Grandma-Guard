@@ -1,3 +1,34 @@
+"""
+GrandmaGuard Post-Generation Policy Engine Module
+
+This module implements the post-generation security policy evaluation system
+for GrandmaGuard. After an AI model generates a response, this engine analyzes
+the output using multiple detection methods to identify potentially harmful
+content that should be blocked before reaching the user.
+
+Core Functionality:
+- Multi-layered post-generation content analysis
+- Context-aware policy enforcement based on input classification
+- Specialized detection for code injection, toxicity, and refusal bypasses
+- Threshold-based blocking with detailed reasoning
+
+The post-generation engine serves as a critical safety net, catching harmful
+outputs that may have bypassed input-level filtering or resulted from subtle
+prompt manipulation techniques.
+
+Key Detection Categories:
+- Code Injection: XSS, SQL injection, malicious code generation
+- Toxicity & Harmful Content: Slurs, toxic comments, harmful instructions
+- Security Bypasses: Refusal mechanism circumvention
+- Data Leakage: PII exposure, credential generation
+
+Functions:
+    PostGenerationPolicyEngine: Main post-generation analysis and decision engine
+
+Author: GrandmaGuard Security Team
+License: MIT
+"""
+
 # app/scanner/post_policy.py
 
 # Define the high-confidence failure thresholds for our Garak detectors.
@@ -14,9 +45,49 @@ BLOCKING_THRESHOLDS = {  # If the model clearly complies with a harmful request.
 
 def PostGenerationPolicyEngine(
     llama_guard_input_verdict: dict, garak_risk_profile: dict
-) -> (str, str):
+) -> tuple[str, str]:
     """
-    Analyzes Garak results in the context of the Llama Guard input scan.
+    Analyze post-generation content and make security policy decisions.
+    
+    This function implements a two-tier post-generation security policy that
+    evaluates AI model outputs using multiple detection methods. It combines
+    input context (from LlamaGuard pre-screening) with output analysis (from
+    Garak detectors) to make nuanced blocking decisions.
+    
+    Policy Rules:
+    1. Unconditional Blocking: Block outputs containing harmful content
+       regardless of input intent (toxicity, code injection, etc.)
+    2. Context-Aware Blocking: Block compliant responses to unsafe prompts
+       (successful jailbreak/refusal bypass detection)
+    
+    The engine uses different thresholds for different threat types,
+    balancing security effectiveness with false positive minimization.
+    
+    Args:
+        llama_guard_input_verdict (dict): Input classification results from LlamaGuard.
+                                        Expected to contain 'status' field with
+                                        'SAFE' or 'UNSAFE' classification.
+        garak_risk_profile (dict): Output analysis results from Garak detectors.
+                                 Expected to contain 'scores' dict mapping
+                                 detector names to normalized risk scores.
+    
+    Returns:
+        tuple[str, str]: A tuple containing:
+            - Decision: "ALLOW" or "BLOCK"
+            - Reason: Detailed explanation of the decision
+    
+    Example:
+        >>> input_verdict = {"status": "UNSAFE", "categories": ["violence"]}
+        >>> risk_profile = {"scores": {"refusal_v2": 0.98, "toxicity": 0.3}}
+        >>> decision, reason = PostGenerationPolicyEngine(input_verdict, risk_profile)
+        >>> print(f"{decision}: {reason}")
+        BLOCK: Post-Gen Block: Model complied with an unsafe prompt...
+        
+        >>> safe_input = {"status": "SAFE"}
+        >>> low_risk = {"scores": {"toxicity": 0.2, "xss_markdown_basic": 0.1}}
+        >>> decision, reason = PostGenerationPolicyEngine(safe_input, low_risk)
+        >>> print(f"{decision}: {reason}")
+        ALLOW: All post-generation checks passed.
     """
     if not garak_risk_profile or "scores" not in garak_risk_profile:
         return "ALLOW", "No Garak risk profile available."

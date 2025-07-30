@@ -1,6 +1,8 @@
 # OllamaModelfile
 FROM ./phi3-mini-classifier.gguf
 
+PARAMETER num_ctx 512
+
 TEMPLATE """<|user|>
 {{ .Prompt }}<|end|>
 <|assistant|>

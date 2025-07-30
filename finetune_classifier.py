@@ -1,4 +1,42 @@
-# finetune_classifier.py
+"""Fine-tuning Module for GrandmaGuard Prompt Classifier.
+
+This module fine-tunes a Microsoft Phi-3 language model using LoRA (Low-Rank Adaptation)
+to create a specialized classifier for detecting harmful or jailbreak prompts. The
+fine-tuned model serves as a core component of the GrandmaGuard security system.
+
+The module implements memory-efficient training using:
+    - 4-bit quantization to reduce memory usage
+    - LoRA adapters for parameter-efficient fine-tuning
+    - Mixed-precision training for performance
+    - Gradient accumulation for stable training
+
+Features:
+    - Automated dataset loading from JSONL format
+    - Configurable LoRA parameters for adapter training
+    - Memory-optimized training pipeline
+    - Checkpoint saving for model recovery
+
+Example:
+    Run the fine-tuning process:
+        python finetune_classifier.py
+    
+    This will create a LoRA adapter trained on the classification dataset.
+
+Constants:
+    BASE_MODEL_NAME: The foundation model to fine-tune (Phi-3-mini)
+    DATASET_NAME: Path to the training dataset in JSONL format
+    NEW_ADAPTER_NAME: Output directory name for the trained adapter
+
+Requirements:
+    - CUDA-compatible GPU recommended for training
+    - Training dataset in proper instruction format
+    - Sufficient disk space for model checkpoints
+
+Note:
+    The training uses a small number of steps by default for testing.
+    Increase max_steps to 500-1000 for production training.
+"""
+
 import torch
 from datasets import load_dataset
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
@@ -19,8 +57,29 @@ NEW_ADAPTER_NAME = (
 
 
 def finetune():
-    """
-    Loads the base model, applies LoRA, and fine-tunes it on our classification dataset.
+    """Load base model, apply LoRA, and fine-tune on classification dataset.
+    
+    This function implements the complete fine-tuning pipeline:
+    1. Loads the training dataset from JSONL format
+    2. Configures 4-bit quantization for memory efficiency
+    3. Loads the base Phi-3 model and tokenizer
+    4. Sets up LoRA adapters for parameter-efficient training
+    5. Configures training arguments for optimal performance
+    6. Executes the training loop using SFTTrainer
+    7. Saves the trained adapter for later use
+    
+    The training uses mixed-precision and gradient accumulation to balance
+    memory usage with training stability. Checkpoints are saved periodically
+    to prevent loss of progress.
+    
+    Raises:
+        RuntimeError: If CUDA is not available when expected
+        FileNotFoundError: If the training dataset is not found
+        torch.cuda.OutOfMemoryError: If GPU memory is insufficient
+        
+    Note:
+        The function expects the dataset to be in instruction format with
+        proper prompt/response pairs for classification training.
     """
     print(f"Starting fine-tuning process for model: {BASE_MODEL_NAME}")
 
@@ -101,4 +160,10 @@ def finetune():
 
 
 if __name__ == "__main__":
+    """Main execution block for the fine-tuning process.
+    
+    Executes the complete fine-tuning pipeline when the script is run directly.
+    This includes loading the dataset, configuring the model, and training
+    the LoRA adapter for prompt classification.
+    """
     finetune()

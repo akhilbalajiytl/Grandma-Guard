@@ -17,6 +17,8 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "5001:5000"
     volumes:
@@ -30,6 +32,10 @@ services:
       - TARGET_LLM_API_KEY=${TARGET_LLM_API_KEY}
       - NIM_API_KEY=${NIM_API_KEY}
       - HF_TOKEN=${HF_TOKEN}
+      - OLLAMA_API_ENDPOINT=${OLLAMA_API_ENDPOINT}
+      - SMART_CLASSIFIER_MODEL_NAME=${SMART_CLASSIFIER_MODEL_NAME}
+      - LLAMA_GUARD_ENDPOINT=${LLAMA_GUARD_ENDPOINT}
+      - LLAMA_GUARD_MODEL=${LLAMA_GUARD_MODEL}
     depends_on:
       db:
         condition: service_healthy
@@ -78,6 +84,8 @@ services:
               count: all
               capabilities: [gpu]
     command: dramatiq --threads 2 app.tasks
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./app:/app/app
     environment:
@@ -86,6 +94,10 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - NIM_API_KEY=${NIM_API_KEY}
       - HF_TOKEN=${HF_TOKEN}
+      - OLLAMA_API_ENDPOINT=${OLLAMA_API_ENDPOINT}
+      - SMART_CLASSIFIER_MODEL_NAME=${SMART_CLASSIFIER_MODEL_NAME}
+      - LLAMA_GUARD_ENDPOINT=${LLAMA_GUARD_ENDPOINT}
+      - LLAMA_GUARD_MODEL=${LLAMA_GUARD_MODEL}
     depends_on:
       redis:
         condition: service_started

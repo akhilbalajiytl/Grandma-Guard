@@ -1,8 +1,8 @@
 # Python virtual environment
-.venv/
 venv/
-garak311/
 llama_venv/
+*.venv
+.*-venv
 
 # Python cache
 __pycache__/
@@ -10,17 +10,13 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-grandma-guard-phi3-classifier/
-grandma-guard-phi3-classifier/final
-*-final/
+# Output scan reports
 reports/
 
 # --- Build Artifacts & Models ---
-# Ignore the llama.cpp build directory
-llama.cpp/
-
-# Ignore the merged Hugging Face model directory
-phi3-mini-classifier-merged/
+dist/
+build/
+*.egg-info
 
 # Ignore the large, converted GGUF model file
 phi3-mini-classifier.gguf
@@ -36,9 +32,6 @@ app/finetune_dataset.jsonl
 # Secrets file
 .env
 
-# Personal notes
-notes.txt
-
 # Ignore the local cache directory for Hugging Face models and other data.
 # The slash at the end ensures we only ignore directories named .cache at the root.
 .cache/
@@ -50,6 +43,8 @@ Thumbs.db
 
 # Local database files
 ci_scan_results.db
-garak_src
-
+vulnerability_scanner.db
+*.log
+.env
 .vscode/
+
