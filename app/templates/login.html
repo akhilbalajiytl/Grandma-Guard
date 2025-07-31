@@ -1,0 +1,44 @@
+<!-- app/templates/login.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Login - Grandma Guard</title>
+    <link rel="icon" href="{{ url_for('static', filename='grandmaguard.png') }}" type="image/x-icon">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/branding.css') }}">
+    <style>
+        body { display: flex; align-items: center; justify-content: center; height: 100vh; }
+        .login-card { max-width: 400px; width: 100%; }
+        .form-group { margin-bottom: 1.5rem; }
+        label { display: block; margin-bottom: 0.5rem; font-weight: 600; }
+        input { width: 100%; box-sizing: border-box; }
+        .error { color: #F87171; background-color: rgba(248, 113, 113, 0.1); padding: 1rem; border-radius: 8px; margin-bottom: 1rem; text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="card login-card">
+        <div style="text-align: center; margin-bottom: 2rem;">
+            <img src="{{ url_for('static', filename='grandmaguard.png') }}" alt="Logo" style="height: 60px;">
+            <h2>Grandma Guard Login</h2>
+        </div>
+
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                <div class="error">{{ messages[0] }}</div>
+            {% endif %}
+        {% endwith %}
+
+        <form method="POST" action="{{ url_for('main.login') }}">
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" required>
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required>
+            </div>
+            <button type="submit" style="width: 100%;">Log In</button>
+        </form>
+    </div>
+</body>
+</html>

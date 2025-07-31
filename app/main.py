@@ -65,19 +65,62 @@ Notes:
 import os
 
 import pandas as pd
-from flask import Response, jsonify, redirect, render_template, request, url_for
+from flask import Response, jsonify, redirect, render_template, request, url_for, flash, Blueprint
+from flask_login import login_user, logout_user, current_user, login_required
 
 # Import the app and db_session created in __init__.py
-from . import app, db_session
+from . import db_session
 
 # In app/main.py
 from .models import RuntimeLog, TestResult, TestRun
+from .auth import User, users
 from .scanner.engine import start_scan_thread
 from .scanner.runtime_scanner import scan_and_respond_in_realtime
 
+# A Blueprint is a way to organize a group of related views and other code.
+# Instead of registering views and other code directly with an application,
+# they are registered with a blueprint.
+main = Blueprint('main', __name__)
 
 # --- Routes ---
-@app.route("/")
+
+# Login Route
+@main.route('/login', methods=['GET', 'POST'])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('main.index')) # If already logged in, go to dashboard
+
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        
+        # Find the user
+        user_to_auth = None
+        for user in users.values():
+            if user.username == username:
+                user_to_auth = user
+                break
+        
+        # Check password and log them in
+        if user_to_auth and user_to_auth.password == password:
+            login_user(user_to_auth)
+            # Redirect to the page they were trying to access, or the index
+            next_page = request.args.get('next')
+            return redirect(next_page or url_for('main.index'))
+        else:
+            flash('Invalid username or password. Please try again.')
+
+    return render_template('login.html')
+
+# Logout Route
+@main.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('main.login'))
+
+@main.route("/")
+@login_required
 def index():
     """Render the main dashboard page with recent test runs.
     
@@ -95,7 +138,8 @@ def index():
     return render_template("index.html", runs=runs)
 
 
-@app.route("/run", methods=["POST"])
+@main.route("/run", methods=["POST"])
+@login_required
 def run_new_scan():
     """Initiate a new AI security scan with specified parameters.
     
@@ -138,10 +182,11 @@ def run_new_scan():
         new_run.id, scan_name, api_endpoint, api_key, api_model_identifier
     )
 
-    return redirect(url_for("index"))
+    return redirect(url_for("main.index"))
 
 
-@app.route("/api/results/<int:run_id>")
+@main.route("/api/results/<int:run_id>")
+@login_required
 def api_results(run_id):
     """Retrieve detailed test results and analytics for a specific run.
     
@@ -265,7 +310,8 @@ def api_results(run_id):
     )
 
 
-@app.route("/api/review/<int:result_id>", methods=["POST"])
+@main.route("/api/review/<int:result_id>", methods=["POST"])
+@login_required
 def handle_review(result_id):
     """Handle manual review and status updates for individual test results.
     
@@ -339,7 +385,8 @@ def handle_review(result_id):
     )
 
 
-@app.route("/compare")
+@main.route("/compare")
+@login_required
 def compare_page():
     """Render the test run comparison interface.
     
@@ -361,7 +408,8 @@ def compare_page():
     return render_template("compare.html", runs=all_runs)
 
 
-@app.route("/api/export/<int:run_id>")
+@main.route("/api/export/<int:run_id>")
+@login_required
 def export_csv(run_id):
     """Export test results to CSV format for external analysis.
     
@@ -428,7 +476,7 @@ def export_csv(run_id):
 
 
 # --- THE LLM FIREWALL/PROXY ENDPOINT ---
-@app.route("/proxy/v1/chat/completions", methods=["POST"])
+@main.route("/proxy/v1/chat/completions", methods=["POST"])
 async def proxy_chat_completions():
     """OpenAI-compatible proxy endpoint with real-time AI safety scanning.
     
@@ -538,7 +586,8 @@ async def proxy_chat_completions():
     )
 
 
-@app.route("/runtime-logs")
+@main.route("/runtime-logs")
+@login_required
 def runtime_logs_page():
     """Display recent runtime logs and security events.
     

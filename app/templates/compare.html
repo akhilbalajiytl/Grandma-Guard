@@ -48,8 +48,9 @@
         <img src="{{ url_for('static', filename='grandmaguard.png') }}" alt="Grandma Guard Logo" class="logo">
         <div class="brand-title">Grandma Guard<small>Knitting a safety blanket around your AI</small></div>
         <div class="nav-links">
-            <a href="{{ url_for('index') }}">Dashboard</a>
-            <a href="{{ url_for('runtime_logs_page') }}">Runtime Logs</a>
+            <a href="{{ url_for('main.index') }}">Dashboard</a>
+            <a href="{{ url_for('main.runtime_logs_page') }}">Runtime Logs</a>
+            <a href="{{ url_for('main.logout') }}" style="background-color: var(--brand-orange); color: var(--brand-dark-teal); font-weight: bold;">Log Out</a>
         </div>
     </header>
 

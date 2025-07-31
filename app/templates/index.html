@@ -31,8 +31,9 @@
         <!-- Add logo to /static/ -->
         <div class="brand-title">Grandma Guard<small>Knitting a safety blanket around your AI</small></div>
         <div class="nav-links">
-            <a href="{{ url_for('runtime_logs_page') }}">Runtime Logs</a>
-            <a href="{{ url_for('compare_page') }}">Compare Runs</a>
+            <a href="{{ url_for('main.runtime_logs_page') }}">Runtime Logs</a>
+            <a href="{{ url_for('main.compare_page') }}">Compare Runs</a>
+            <a href="{{ url_for('main.logout') }}" style="background-color: var(--brand-orange); color: var(--brand-dark-teal); font-weight: bold;">Log Out</a>
         </div>
     </header>
 

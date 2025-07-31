@@ -67,7 +67,7 @@ from dramatiq.brokers.redis import RedisBroker
 redis_broker = RedisBroker(host="redis")
 dramatiq.set_broker(redis_broker)
 
-@dramatiq.actor
+@dramatiq.actor(max_retries=3, time_limit=300000) # 5-minute time limit
 def run_forensic_analysis(log_id: int):
     """Execute comprehensive forensic analysis as a background task.
     
@@ -139,45 +139,46 @@ def run_forensic_analysis(log_id: int):
         - Thread-safe database operations
     """
     # --- DYNAMIC IMPORTS INSIDE THE TASK ---
-    # Import what we need only when the task is actually running.
     print(f"🔬 Background task started for RuntimeLog ID: {log_id}")
     from . import app, db_session
     from .models import RuntimeLog
-    from .scanner.garak_loader import get_analyzer # This will use models loaded by another process
+    from .scanner.garak_loader import get_analyzer
 
-    with app.app_context():
-        session = db_session()
-        log_entry = session.query(RuntimeLog).filter_by(id=log_id).one_or_none()
+    session = None  # Initialize session to None
+    try:
+        with app.app_context():
+            session = db_session()
+            log_entry = session.query(RuntimeLog).filter_by(id=log_id).one_or_none()
 
-        if not log_entry:
-            print(f"❌ Could not find RuntimeLog ID: {log_id}")
-            return
-            
-        try:
-            # Note: This task now depends on the models being loaded
-            # by the main webapp process. This is a more advanced
-            # architecture. For now, let's assume the worker
-            # might need to load them itself if run standalone.
-            # A better long-term solution might be a dedicated ML service.
-            
-            # For now, let's just re-implement the old logic safely here.
-            from .scanner.forensic_orchestrator import get_forensic_orchestrator # Assuming you still have this logic
-            
+            if not log_entry:
+                print(f"❌ Could not find RuntimeLog ID: {log_id}. Task will not be retried.")
+                # This is a "clean" failure, no need to retry.
+                return
+
+            # Proceed with analysis
             log_entry.forensic_status = "RUNNING"
             session.commit()
-            
-            forensic_orchestrator = get_forensic_orchestrator()
-            full_risk_profile = forensic_orchestrator.analyze(
+
+            forensic_analyzer = get_analyzer()
+            full_risk_profile = forensic_analyzer.analyze(
                 log_entry.user_prompt, log_entry.llm_response
             )
 
             log_entry.forensic_risk_profile = full_risk_profile
             log_entry.forensic_status = "COMPLETE"
             print(f"✅ Forensic analysis complete for RuntimeLog ID: {log_id}")
-            
-        except Exception as e:
+
+    except Exception as e:
+        print(f"❌ Error during forensic analysis for log {log_id}: {e}")
+        # If an error occurs, try to update the log entry's status to "ERROR"
+        if session and 'log_entry' in locals() and log_entry:
             log_entry.forensic_status = "ERROR"
-            print(f"❌ Error during forensic analysis for log {log_id}: {e}")
-        finally:
             session.commit()
+        # Re-raise the exception to trigger Dramatiq's retry mechanism.
+        # After max_retries, the message will be discarded.
+        raise
+
+    finally:
+        # Always ensure the session is closed.
+        if session:
             session.close()

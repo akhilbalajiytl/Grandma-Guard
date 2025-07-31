@@ -49,6 +49,7 @@ Notes:
 
 # app/models.py
 import datetime
+import os
 
 from sqlalchemy import (
     JSON,
@@ -65,7 +66,6 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Mapped, mapped_column, relationship, sessionmaker
 
 Base = declarative_base()
-
 
 class TestRun(Base):
     """Database model representing a security scanning campaign.

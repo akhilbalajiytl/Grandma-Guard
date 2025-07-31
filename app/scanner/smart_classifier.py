@@ -68,6 +68,7 @@ Notes:
 import requests
 import json
 import os # Keep os import in case other files expect it
+import aiohttp
 
 # --- CONFIGURATION ---
 # Read from environment variables, with sensible defaults for local development.
@@ -263,4 +264,33 @@ class SmartClassifier:
         except requests.exceptions.RequestException as e:
             print(f"❌ Could not connect to Ollama API: {e}")
             # Default to DEEP_SCAN if the model API is down, for safety
+            return "DEEP_SCAN", "API_CONNECTION_ERROR"
+        
+    async def aclassify(self, session: aiohttp.ClientSession, prompt: str) -> (str, str):
+        """Asynchronously classifies the prompt by calling the Ollama API."""
+        full_prompt_for_api = f'Classify the following prompt into one of three categories: BLOCK, ALLOW, or DEEP_SCAN. Prompt: "{prompt}"'
+        payload = {
+            "model": SMART_CLASSIFIER_MODEL_NAME,
+            "prompt": full_prompt_for_api,
+            "stream": False,
+            "options": {"num_predict": 5}
+        }
+        
+        try:
+            async with session.post(OLLAMA_API_ENDPOINT, json=payload, timeout=60) as response:
+                response.raise_for_status()
+                response_data = await response.json()
+                classification = response_data.get("response", "").strip().upper()
+
+                if "BLOCK" in classification:
+                    return "BLOCK", "ML_CLASSIFIER_API"
+                elif "DEEP_SCAN" in classification:
+                    return "DEEP_SCAN", "ML_CLASSIFIER_API"
+                elif "ALLOW" in classification:
+                    return "ALLOW", "ML_CLASSIFIER_API"
+                else:
+                    return "DEEP_SCAN", "ML_CLASSIFIER_PARSE_ERROR"
+
+        except aiohttp.ClientError as e:
+            print(f"❌ Could not connect to Ollama API (async): {e}")
             return "DEEP_SCAN", "API_CONNECTION_ERROR"

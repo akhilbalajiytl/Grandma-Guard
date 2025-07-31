@@ -1,5 +1,6 @@
 # Core Web & Database
 Flask
+Flask-Login
 gunicorn
 uvicorn
 SQLAlchemy
