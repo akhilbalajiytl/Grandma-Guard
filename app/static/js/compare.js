@@ -121,7 +121,10 @@ function renderRunColumn(container, data, runId) {
                     <th>Category</th>
                     <th>Status</th>
                     <th>Payload</th>
+                    <th>Response</th> 
+                    <th>Garak</th>     
                     <th>Llama Guard</th>
+                    <th>Judge</th>     
                 </tr>
             </thead>
             <tbody>
@@ -133,14 +136,21 @@ function renderRunColumn(container, data, runId) {
             html += `
                 <tr>
                     <td>${escapeHtml(result.owasp_category)}</td>
-                    <td><span class="status status-${result.status}">${escapeHtml(result.status.replace('_', ' '))}</span></td>
+                    <td><span class="status status-${result.status.toLowerCase()}">${escapeHtml(result.status.replace('_', ' '))}</span></td>
                     <td><pre>${escapeHtml(result.payload)}</pre></td>
+                    <!-- ADDED THE MODEL RESPONSE CELL -->
+                    <td><pre>${escapeHtml(result.response)}</pre></td>
+                    <!-- ADDED THE GARAK STATUS CELL -->
+                    <td>${escapeHtml(result.garak_status || 'N/A')}</td>
+                    <!-- Llama Guard Cell (already existed) -->
                     <td>${formatLlamaGuard(result.llama_guard_status)}</td>
+                    <!-- ADDED THE JUDGE STATUS CELL -->
+                    <td>${escapeHtml(result.judge_status || 'N/A')}</td>
                 </tr>
             `;
         });
     } else {
-        html += `<tr><td colspan="4">No detailed results found.</td></tr>`;
+        html += `<tr><td colspan="7">No detailed results found.</td></tr>`; // Changed colspan to 7
     }
 
     html += `</tbody></table>`;

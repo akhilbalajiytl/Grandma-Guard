@@ -1,19 +1,33 @@
-# docker-compose.yml (Final, Robust, GPU-Enabled)
-
-volumes:
-  mysql_data:
-  hf_cache:
+# docker-compose.yml (Definitive, Final, and Correct)
 
 networks:
   llm_toolkit_net:
     driver: bridge
 
 services:
+  # This service runs first, creates the DB tables, and then exits.
+  db-init:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev-gpu
+    # We use the entrypoint to wait for the DB, then run the init script
+    command: ["/app/entrypoint.sh", "init_db"]
+    environment:
+      - DATABASE_URL=mysql+pymysql://${MYSQL_USER}:${MYSQL_PASSWORD}@db/${MYSQL_DATABASE}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - llm_toolkit_net
+
+  # The webapp waits for db-init to complete successfully before starting.
   webapp:
     build:
       context: .
       dockerfile: Dockerfile
       target: dev-gpu
+    command: ["/app/entrypoint.sh", "web"]
     deploy:
       resources:
         reservations:
@@ -37,17 +51,55 @@ services:
       - TARGET_LLM_API_KEY=${TARGET_LLM_API_KEY}
       - NIM_API_KEY=${NIM_API_KEY}
       - HF_TOKEN=${HF_TOKEN}
-      - HF_HOME=/root/.cache/huggingface
+      - FLASK_SECRET_KEY=${FLASK_SECRET_KEY}
+      - APP_ADMIN_PASSWORD=${APP_ADMIN_PASSWORD}
       - OLLAMA_API_ENDPOINT=${OLLAMA_API_ENDPOINT}
       - SMART_CLASSIFIER_MODEL_NAME=${SMART_CLASSIFIER_MODEL_NAME}
       - LLAMA_GUARD_ENDPOINT=${LLAMA_GUARD_ENDPOINT}
       - LLAMA_GUARD_MODEL=${LLAMA_GUARD_MODEL}
+      - HF_HOME=/root/.cache/huggingface
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    networks:
+      - llm_toolkit_net
+
+  # The worker also waits for db-init to complete successfully.
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["/app/entrypoint.sh", "worker"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./app:/app/app
+      - hf_cache:/root/.cache/huggingface
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - DATABASE_URL=mysql+pymysql://${MYSQL_USER}:${MYSQL_PASSWORD}@db/${MYSQL_DATABASE}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - NIM_API_KEY=${NIM_API_KEY}
+      - HF_TOKEN=${HF_TOKEN}
       - FLASK_SECRET_KEY=${FLASK_SECRET_KEY}
       - APP_ADMIN_PASSWORD=${APP_ADMIN_PASSWORD}
+      - OLLAMA_API_ENDPOINT=${OLLAMA_API_ENDPOINT}
+      - SMART_CLASSIFIER_MODEL_NAME=${SMART_CLASSIFIER_MODEL_NAME}
+      - LLAMA_GUARD_ENDPOINT=${LLAMA_GUARD_ENDPOINT}
+      - LLAMA_GUARD_MODEL=${LLAMA_GUARD_MODEL}
+      - HF_HOME=/root/.cache/huggingface
     depends_on:
-      db:
-        condition: service_healthy
-    #restart: always
+      db-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
     networks:
       - llm_toolkit_net
 
@@ -68,54 +120,15 @@ services:
       start_period: 30s
     volumes:
       - mysql_data:/var/lib/mysql
-    #restart: always
     networks:
       - llm_toolkit_net
-    
-      
+
   redis:
     image: "redis:alpine"
     ports: ["6379:6379"]
     networks:
       - llm_toolkit_net
 
-  worker:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    # The worker also needs access to the GPU if it runs ML tasks
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    command: dramatiq --threads 2 app.dramatiq_setup
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    volumes:
-      - ./app:/app/app
-      - hf_cache:/root/.cache/huggingface
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-      - DATABASE_URL=mysql+pymysql://${MYSQL_USER}:${MYSQL_PASSWORD}@db/${MYSQL_DATABASE}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - NIM_API_KEY=${NIM_API_KEY}
-      - HF_TOKEN=${HF_TOKEN}
-      - HF_HOME=/root/.cache/huggingface
-      - OLLAMA_API_ENDPOINT=${OLLAMA_API_ENDPOINT}
-      - SMART_CLASSIFIER_MODEL_NAME=${SMART_CLASSIFIER_MODEL_NAME}
-      - LLAMA_GUARD_ENDPOINT=${LLAMA_GUARD_ENDPOINT}
-      - LLAMA_GUARD_MODEL=${LLAMA_GUARD_MODEL}
-      - FLASK_SECRET_KEY=${FLASK_SECRET_KEY}
-      - APP_ADMIN_PASSWORD=${APP_ADMIN_PASSWORD}
-    depends_on:
-      redis:
-        condition: service_started
-      db:
-        condition: service_healthy
-    #restart: unless-stopped # Use unless-stopped for workers
-    networks:
-      - llm_toolkit_net
-
+volumes:
+  mysql_data:
+  hf_cache:

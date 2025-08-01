@@ -22,6 +22,10 @@
         .main-content {
             flex: 3;
         }
+
+        .sidebar form button {
+            margin-top: 1.5rem; /* This adds space above the button */
+        }
     </style>
 </head>
 
@@ -41,20 +45,21 @@
         <aside class="sidebar">
             <div class="card">
                 <h2>New Scan</h2>
-                <form action="/run" method="POST">
-                    <form action="/run" method="POST">
-                        <label for="scan_name">Test Run Name:</label>
-                        <input type="text" id="scan_name" name="scan_name" value="GPT-4o Test" required>
-                        <label for="api_model_identifier">Model Identifier:</label>
-                        <input type="text" id="api_model_identifier" name="api_model_identifier" value="gpt-4o"
-                            required>
-                        <label for="api_endpoint">API Endpoint:</label>
-                        <input type="text" id="api_endpoint" name="api_endpoint"
-                            value="https://api.openai.com/v1/chat/completions" required>
-                        <label for="api_key">API Key:</label>
-                        <input type="password" id="api_key" name="api_key" placeholder="Enter API Key here" required>
-                        <button type="submit">Start Scan</button>
-                    </form>
+                    <form action="{{ url_for('main.run_new_scan') }}" method="POST">
+                    <label for="scan_name">Test Run Name:</label>
+                    <input type="text" id="scan_name" name="scan_name" value="GPT-4o Test" required>
+                
+                    <label for="api_model_identifier">Model Identifier:</label>
+                    <input type="text" id="api_model_identifier" name="api_model_identifier" value="gpt-4o" required>
+                
+                    <label for="api_endpoint">API Endpoint:</label>
+                    <input type="text" id="api_endpoint" name="api_endpoint" value="https://api.openai.com/v1/chat/completions" required>
+                
+                    <label for="api_key">API Key:</label>
+                    <input type="password" id="api_key" name="api_key" placeholder="Enter API Key here" required>
+                
+                    <button type="submit">Start Scan</button>
+                </form>
             </div>
             <div class="card" style="margin-top: 2rem;">
                 <h2>Past Runs</h2>

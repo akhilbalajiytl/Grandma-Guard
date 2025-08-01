@@ -42,47 +42,31 @@ Notes:
 import os
 from dotenv import load_dotenv
 from flask import Flask
-from sqlalchemy import create_engine
-from sqlalchemy.orm import scoped_session, sessionmaker
 from flask_login import LoginManager
 
-# --- PHASE 2: CORE APP OBJECTS ---
+# Import the engine and session from our new db.py
+from .db import engine, db_session
+
+# --- CORE APP OBJECTS ---
 load_dotenv()
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'a-very-secret-key-in-dev')
-
-# --- Database Setup ---
-DATABASE_URL = os.getenv("DATABASE_URL")
-if not DATABASE_URL:
-    raise ValueError("No DATABASE_URL set for Flask application")
-engine = create_engine(DATABASE_URL)
-db_session = scoped_session(
-    sessionmaker(autocommit=False, autoflush=False, bind=engine)
-)
 
 # --- Login Manager Setup ---
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'main.login'
 
-# Import the user loader function from our new auth module
 from .auth import get_user
-
-# Tell the login manager how to load a user
 @login_manager.user_loader
 def load_user(user_id):
     return get_user(user_id)
 
-# --- PHASE 3: DEFERRED IMPORTS AND REGISTRATION ---
+# --- IMPORTS AND REGISTRATION ---
 from . import models
-
-with app.app_context():
-    models.Base.metadata.create_all(bind=engine, checkfirst=True)
 
 from .main import main as main_blueprint
 app.register_blueprint(main_blueprint)
-
-
 
 # --- DEFINE APP-LEVEL BEHAVIOR (like teardown) ---
 @app.teardown_appcontext

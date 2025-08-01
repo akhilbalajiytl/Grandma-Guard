@@ -17,10 +17,8 @@
             grid-template-columns: 1fr 1fr;
             gap: 2em;
             align-items: start;
-            /* Aligns columns at the top */
         }
 
-        /* Additional styling for the summary card in this context */
         .result-column .card {
             margin-bottom: 2rem;
         }
@@ -40,6 +38,20 @@
         .result-column .card li:last-child {
             border-bottom: none;
         }
+
+        /* --- NEW CSS FOR BETTER TABLE LAYOUT --- */
+        .result-column table pre {
+            max-width: 300px; /* Adjust as needed */
+            max-height: 150px;
+            overflow: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .status-pass { color: #4ADE80; font-weight: bold; }
+        .status-fail { color: #F87171; font-weight: bold; }
+        .status-pending_review { color: #FACC15; font-weight: bold; }
+        .status-error { color: #9CA3AF; }
+        /* --- END OF NEW CSS --- */
     </style>
 </head>
 

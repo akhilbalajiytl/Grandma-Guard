@@ -26,7 +26,7 @@ CMD ["gunicorn", "-c", "gunicorn.conf.py", "asgi:app"]
 FROM base AS dev-gpu
 # Install build tools and CUDA repository
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gnupg wget build-essential \
+    gnupg wget build-essential default-mysql-client dnsutils \
     && rm -rf /var/lib/apt/lists/*
 RUN wget https://developer.download.nvidia.com/compute/cuda/repos/debian11/x86_64/cuda-keyring_1.0-1_all.deb && \
     dpkg -i cuda-keyring_1.0-1_all.deb && \
