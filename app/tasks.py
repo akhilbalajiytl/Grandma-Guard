@@ -58,16 +58,11 @@ Notes:
 
 # app/tasks.py
 import dramatiq
-from dramatiq.brokers.redis import RedisBroker
 
 # DO NOT import 'app' or 'db_session' at the top level here.
 # This prevents the chain reaction of model loading.
 
-# Configure the broker
-redis_broker = RedisBroker(host="redis")
-dramatiq.set_broker(redis_broker)
-
-@dramatiq.actor(max_retries=3, time_limit=300000) # 5-minute time limit
+@dramatiq.actor(queue_name="gpu", max_retries=3, time_limit=300000)
 def run_forensic_analysis(log_id: int):
     """Execute comprehensive forensic analysis as a background task.
     
@@ -182,3 +177,22 @@ def run_forensic_analysis(log_id: int):
         # Always ensure the session is closed.
         if session:
             session.close()
+            
+@dramatiq.actor(queue_name="gpu", max_retries=1, time_limit=3600000)
+def execute_full_scan(run_id, scan_name, api_endpoint, api_key, api_model_identifier):
+    """
+    Dramatiq task to run the entire hybrid security scan in the background.
+    """
+    # --- THIS IS THE FIX ---
+    # Import the scanner engine *inside* the task function.
+    # This breaks the circular import at startup.
+    from .scanner.engine import run_scan
+    # --- END OF FIX ---
+
+    print(f"BACKGROUND WORKER: Starting scan for run_id: {run_id}")
+    try:
+        run_scan(run_id, scan_name, api_endpoint, api_key, api_model_identifier)
+        print(f"BACKGROUND WORKER: Scan for run_id {run_id} completed successfully.")
+    except Exception as e:
+        print(f"BACKGROUND WORKER: A critical error occurred during scan for run_id {run_id}: {e}")
+        raise

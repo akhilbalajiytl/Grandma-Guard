@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Red Team Report: {{ run.scan_name }}</title>
+    <link rel="icon" href="{{ url_for('static', filename='grandmaguard.png') }}" type="image/x-icon">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/branding.css') }}">
+    {# We are using the supervisor's CSS logic directly for the report content #}
+    <style>
+        .page-container { padding: 0 2rem; }
+        .report-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem; margin-bottom: 2rem; }
+        
+        /* Summary Cards */
+        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
+        .summary-card { background-color: var(--panel-bg); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border-color); text-align: center; }
+        .summary-card-value { font-size: 2.5rem; font-weight: 700; color: var(--brand-orange); }
+        .summary-card-label { font-size: 1rem; color: var(--text-muted); margin-top: 0.5rem; }
+        
+        /* Prompt Section (each test case) */
+        .prompt-section { background: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 12px; margin-bottom: 1.5rem; overflow: hidden; }
+        .prompt-header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.5rem; cursor: pointer; background-color: var(--hover-bg); }
+        .prompt-title { font-weight: 600; word-break: break-all; }
+        .prompt-tags { display: flex; gap: 0.75rem; align-items: center; }
+        .tag { font-size: 0.8rem; font-weight: 700; padding: 0.25rem 0.75rem; border-radius: 999px; }
+        .tag-pass { background-color: rgba(74, 222, 128, 0.2); color: #4ADE80; }
+        .tag-fail { background-color: rgba(248, 113, 113, 0.2); color: #F87171; }
+        .tag-regression { background-color: #721c24; color: #f8d7da; border: 1px solid #f5c6cb; }
+        .tag-improvement { background-color: #155724; color: #d4edda; border: 1px solid #c3e6cb; }
+        .expand-icon { transition: transform 0.2s; font-size: 1.2rem; }
+        
+        /* Collapsible Details */
+        .prompt-details { max-height: 0; overflow: hidden; transition: max-height 0.3s ease-out; padding: 0 1.5rem; }
+        .prompt-section.expanded .prompt-details { max-height: 5000px; padding: 1.5rem; }
+        .prompt-section.expanded .expand-icon { transform: rotate(180deg); }
+
+        /* Turn-by-turn assessment styling */
+        .turn-assessment { padding: 1rem; border-top: 1px dashed var(--border-color); }
+        .turn-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+        .turn-number { font-weight: bold; color: var(--text-muted); }
+        pre { max-height: 200px; overflow-y: auto; }
+        .reasoning { margin-top: 1rem; padding: 1rem; background-color: rgba(245, 232, 215, 0.1); border-left: 3px solid var(--brand-orange); border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <header class="header-nav">
+        <img src="{{ url_for('static', filename='grandmaguard.png') }}" alt="Grandma Guard Logo" class="logo">
+        <div class="brand-title">Grandma Guard<small>Red Team & Regression Report</small></div>
+        <div class="nav-links">
+            <a href="{{ url_for('main.index') }}">Dashboard</a>
+            <a href="{{ url_for('main.compare_page') }}">Compare Runs</a>
+            <a href="{{ url_for('main.logout') }}" style="background-color: var(--brand-orange); color: var(--brand-dark-teal); font-weight: bold;">Log Out</a>
+        </div>
+    </header>
+
+    <div class="page-container">
+        <div class="report-header">
+            <div>
+                <h1>{{ run.scan_name }}</h1>
+                <p style="color: var(--text-muted);">
+                    Compared against: {{ previous_run.scan_name if previous_run else "No previous run" }}
+                </p>
+            </div>
+            <a href="{{ url_for('main.export_csv', run_id=run.id) }}" class="btn">Export CSV</a>
+        </div>
+
+        {# Overall Stats Cards #}
+        <div class="summary-grid">
+            <div class="summary-card">
+                <div class="summary-card-value">{{ "%.1f"|format(run.overall_score * 100) }}%</div>
+                <div class="summary-card-label">Pass Rate</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-card-value">{{ report_data|selectattr('result_obj.status', 'equalto', 'FAIL')|list|length }}</div>
+                <div class="summary-card-label">Total Failures</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-card-value">{{ report_data|selectattr('regression_status', 'equalto', 'REGRESSION')|list|length }}</div>
+                <div class="summary-card-label">Regressions</div>
+            </div>
+             <div class="summary-card">
+                <div class="summary-card-value">{{ report_data|selectattr('regression_status', 'equalto', 'IMPROVEMENT')|list|length }}</div>
+                <div class="summary-card-label">Improvements</div>
+            </div>
+        </div>
+
+        <h2>Detailed Test Cases</h2>
+        
+        {# Main loop for each test case #}
+        {% for item in report_data %}
+        <div class="prompt-section">
+            <div class="prompt-header" onclick="this.parentElement.classList.toggle('expanded')">
+                <div class="prompt-title">
+                    {{ item.initial_payload | truncate(120) }}
+                </div>
+                <div class="prompt-tags">
+                    {% if item.regression_status == 'REGRESSION' %}<span class="tag tag-regression">REGRESSION</span>{% endif %}
+                    {% if item.regression_status == 'IMPROVEMENT' %}<span class="tag tag-improvement">IMPROVEMENT</span>{% endif %}
+                    <span class="tag {{ 'tag-fail' if item.result_obj.status == 'FAIL' else 'tag-pass' }}">{{ item.result_obj.status }}</span>
+                    <span class="expand-icon">▼</span>
+                </div>
+            </div>
+            <div class="prompt-details">
+                {# Loop for each turn in the conversation #}
+                {% for turn in item.result_obj.assessment_details %}
+                <div class="turn-assessment">
+                    <div class="turn-header">
+                        <span class="turn-number">Turn {{ turn.turn }}</span>
+                        <div class="prompt-tags">
+                            {% if turn.is_undesirable %}
+                                <span class="tag tag-fail">Undesirable</span>
+                            {% else %}
+                                <span class="tag tag-pass">Safe</span>
+                            {% endif %}
+                            {% if 'desired_outcome' in turn %}
+                                <span class="tag {{ 'tag-pass' if turn.matches_desired else 'tag-fail' }}">
+                                    {{ 'Matches Desired' if turn.matches_desired else 'Not Desired' }}
+                                </span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <strong>Prompt:</strong><pre>{{ turn.prompt }}</pre>
+                    <strong>Response:</strong><pre>{{ turn.response }}</pre>
+                    <div class="reasoning"><strong>Assessment:</strong> {{ turn.reasoning }}</div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    {# No external JS needed for the expand/collapse now, it's handled by a simple onclick #}
+</body>
+</html>

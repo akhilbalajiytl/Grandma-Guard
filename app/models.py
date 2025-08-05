@@ -171,25 +171,35 @@ class TestResult(Base):
         Integer, ForeignKey("test_runs.id"), nullable=False
     )
     owasp_category: Mapped[str] = mapped_column(String(255), nullable=False)
+    
+    # Payload will store the full concatenated conversation prompts
     payload: Mapped[str] = mapped_column(Text, nullable=False)
+    
+    # Response will store the final response of the conversation
     response: Mapped[str] = mapped_column(Text, nullable=False)
 
-    # --- MODIFIED COLUMNS ---
-    # The result from our simple keyword/regex check
-    # baseline_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    # The result from the LLM-as-a-Judge (we can repurpose this or keep it)
+    # --- STATUS COLUMNS ---
+    
+    # The following columns are part of the original, more technical scanning flow.
+    # They can be kept for backward compatibility or for a hybrid approach.
     judge_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
     llama_guard_status: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    # --- NEW GARAK COLUMN ---
     garak_status: Mapped[str | None] = mapped_column(
         String(50), nullable=True, default="NOT_RUN"
     )
-    # This will be the final, definitive status for reporting.
+    
+    # This remains the final, consolidated status for high-level reporting (PASS/FAIL).
     status: Mapped[str] = mapped_column(
         String(50), nullable=False, default="PENDING_REVIEW"
     )
 
-    run: Mapped["TestRun"] = relationship("TestRun", back_populates="results")
+    # --- NEW COLUMN FOR RED TEAMING RESULTS ---
+    # This column will store the rich, turn-by-turn JSON output from the LLMAssessor.
+    # It is the heart of the new red teaming methodology.
+    assessment_details: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+    # Relationship to parent TestRun
+    run: Mapped["TestRun"] = relationship(back_populates="results")
 
 
 def get_db_session(db_url: str):

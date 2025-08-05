@@ -10,7 +10,7 @@ initialization conflicts and dependency issues.
 Core Purpose:
 - Isolated Dramatiq worker configuration without Flask app dependencies
 - Redis broker setup for reliable task queue management
-- Task discovery and registration for background processing
+- Task discovery and registration for backNregressionground processing
 - Prevention of database initialization race conditions
 
 Architectural Design:
@@ -66,18 +66,10 @@ License: MIT
 """
 
 # app/dramatiq_setup.py
-import dramatiq
-from dramatiq.brokers.redis import RedisBroker
+# Import the broker file. This executes the code inside it,
+# creating and setting the global broker instance.
+from . import broker
 
-# This file serves as the SOLE entry point for Dramatiq worker processes.
-# It deliberately avoids importing the main Flask application to prevent
-# database initialization race conditions and circular dependency issues.
-
-# Configure Redis broker for reliable task queue management
-redis_broker = RedisBroker(host="redis")
-dramatiq.set_broker(redis_broker)
-
-# Import tasks module to enable Dramatiq task discovery and registration.
-# The tasks.py module uses dynamic imports to avoid Flask app dependencies
-# at the module level, ensuring clean worker process initialization.
+# Now, import the tasks. Dramatiq will automatically discover them
+# and attach them to the broker that was just set.
 from . import tasks

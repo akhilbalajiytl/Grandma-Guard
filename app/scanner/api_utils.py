@@ -70,6 +70,7 @@ import asyncio
 import aiohttp
 import jwt
 import requests
+from typing import Union, List, Dict
 
 
 def generate_zhipu_token(api_key):
@@ -209,8 +210,12 @@ def call_llm_api(endpoint, api_key, prompt, api_model_identifier):
 
 
 async def async_call_llm_api(
-    session: aiohttp.ClientSession, api_endpoint, api_key, prompt, model_identifier
-):
+    session: aiohttp.ClientSession, 
+    api_endpoint: str, 
+    api_key: str, 
+    prompt_or_messages: Union[str, List[Dict]], 
+    model_identifier: str
+) -> str:
     """Make asynchronous API call to LLM endpoint with comprehensive error handling.
 
     Performs non-blocking HTTP request to a Large Language Model API endpoint
@@ -290,9 +295,18 @@ async def async_call_llm_api(
         - Optimized for concurrent security scanning operations
     """
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    
+    # --- THIS IS THE CORE FIX ---
+    # Check if we were given a full messages list or just a single prompt string
+    if isinstance(prompt_or_messages, list):
+        messages = prompt_or_messages
+    else:
+        # If it's a string, wrap it in the standard message format
+        messages = [{"role": "user", "content": str(prompt_or_messages)}]
+
     payload = {
         "model": model_identifier,
-        "messages": [{"role": "user", "content": prompt}],
+        "messages": messages,
         "stream": False,
     }
 
@@ -300,29 +314,22 @@ async def async_call_llm_api(
         async with session.post(
             api_endpoint, headers=headers, json=payload, timeout=120
         ) as response:
-            response.raise_for_status()  # This will raise an error for non-2xx statuses
-
+            # Check for non-200 status codes and log the response body for debugging
+            if response.status != 200:
+                error_body = await response.text()
+                print(f"API HTTP Error: Status {response.status}, Body: {error_body[:500]}")
+                return f"API_ERROR: Status {response.status}"
+            
             data = await response.json()
             if "choices" in data and data.get("choices"):
-                return data["choices"][0]["message"]["content"].strip()
+                return data["choices"][0].get("message", {}).get("content", "").strip()
             else:
-                # Log the unexpected but valid JSON response
-                print(
-                    f"API Response Error: 'choices' key missing or empty. Full response: {data}"
-                )
+                print(f"API Response Error: 'choices' key missing. Full response: {data}")
                 return "API_ERROR: Unexpected response format."
 
-    except aiohttp.ClientResponseError as e:
-        # This catches HTTP errors like 401, 404, 500
-        print(
-            f"API HTTP Error: Status {e.status}, Message: {e.message}, URL: {e.request_info.url}"
-        )
-        return f"API_ERROR: Status {e.status}"
-    except asyncio.TimeoutError:
-        # This catches request timeouts
-        print(f"Network/Request Error: Request to {api_endpoint} timed out.")
-        return "NETWORK_ERROR: Timeout"
+    except aiohttp.ClientError as e:
+        print(f"AIOHTTP Client Error: {e}")
+        return f"NETWORK_ERROR: {e}"
     except Exception as e:
-        # Catches other issues like general network problems
         print(f"An unexpected error occurred in async_call_llm_api: {e}")
         return f"UNKNOWN_ERROR: {e}"

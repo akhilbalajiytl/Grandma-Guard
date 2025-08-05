@@ -28,10 +28,14 @@ Note:
 
 # Networking
 bind = "0.0.0.0:5000"
-workers = 2 # You can safely increase this now
+workers = 2
 
 # Worker class
 worker_class = "uvicorn.workers.UvicornWorker"
+
+# We are disabling preloading. Each worker will be a fresh, independent process.
+preload_app = False
+# --------------------------------
 
 # Logging
 loglevel = "debug"
@@ -42,11 +46,13 @@ errorlog = "-"
 timeout = 300
 graceful_timeout = 60
 
-# --- The Key Part: Worker Initialization Hook ---
-# This is the most robust way to load models in a multi-worker setup
-# without using preload_app, which can cause fork-related issues.
-def post_worker_init(worker):
-    from app.scanner.garak_loader import get_analyzer
-    worker.log.info(f"Worker (pid: {worker.pid}) is pre-loading the Garak ForensicAnalyzer.")
-    get_analyzer() # This will trigger the safe, singleton-based loading in each worker.
-    worker.log.info(f"✅ Garak ForensicAnalyzer is ready for worker (pid: {worker.pid}).")
+# --- WE ALSO NEED THE POST_WORKER_INIT HOOK ---
+# With preload=True, the models are loaded in the master.
+# We still want to ensure each worker has a reference to the instance.
+# So, we will define the hook here to call the loader.
+# def post_worker_init(worker):
+#     """Gunicorn hook to initialize shared resources."""
+#     worker.log.info(f"Worker {worker.pid} initializing...")
+#     from app.scanner.garak_loader import get_analyzer
+#     get_analyzer() # This will ensure the singleton is populated in the master before fork.
+#     worker.log.info(f"Worker {worker.pid} initialization complete.")

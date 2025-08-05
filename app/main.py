@@ -63,9 +63,10 @@ Notes:
 
 # app/main.py
 import os
+import traceback
 
 import pandas as pd
-from flask import Response, jsonify, redirect, render_template, request, url_for, flash, Blueprint
+from flask import Response, jsonify, redirect, render_template, request, url_for, flash, Blueprint, abort
 from flask_login import login_user, logout_user, current_user, login_required
 
 # Import the app and db_session created in __init__.py
@@ -74,8 +75,8 @@ from . import db_session
 # In app/main.py
 from .models import RuntimeLog, TestResult, TestRun
 from .auth import User, users
-from .scanner.engine import start_scan_thread
 from .scanner.runtime_scanner import scan_and_respond_in_realtime
+from .tasks import execute_full_scan
 
 # A Blueprint is a way to organize a group of related views and other code.
 # Instead of registering views and other code directly with an application,
@@ -141,48 +142,55 @@ def index():
 @main.route("/run", methods=["POST"])
 @login_required
 def run_new_scan():
-    """Initiate a new AI security scan with specified parameters.
-    
-    Creates a new test run in the database and starts a background scanning
-    thread to process security tests against the specified AI model endpoint.
-    
-    Form Parameters:
-        scan_name (str): Human-readable name for the scan campaign
-        api_model_identifier (str): Model identifier (e.g., "gpt-3.5-turbo")
-        api_endpoint (str): Target API endpoint URL
-        api_key (str): API key for authentication with target service
-    
-    Returns:
-        Response: Redirect to index page on success, error message on failure
-        
-    Raises:
-        400: If any required fields are missing
-        
-    Side Effects:
-        - Creates new TestRun record in database
-        - Starts background scanning thread
-        - Redirects user to dashboard to monitor progress
     """
-    scan_name = request.form["scan_name"]
-    api_model_identifier = request.form["api_model_identifier"]
-    api_endpoint = request.form["api_endpoint"]
+    Initiates a new security scan by sending a task to the background worker.
+    This version includes robust exception handling to debug startup errors.
+    """
+    try:
+        print("[WEBAPP DEBUG] Inside run_new_scan...")
+        scan_name = request.form["scan_name"]
+        api_model_identifier = request.form["api_model_identifier"]
+        api_endpoint = request.form["api_endpoint"]
+        api_key = request.form["api_key"]
+        print("[WEBAPP DEBUG] Form data retrieved successfully.")
 
-    # GET THE KEY FROM THE WEB FORM
-    api_key = request.form["api_key"]
+        if not all([scan_name, api_model_identifier, api_endpoint, api_key]):
+            print("[WEBAPP DEBUG] Missing form fields.")
+            return "Error: All fields are required.", 400
 
-    if not all([scan_name, api_model_identifier, api_endpoint, api_key]):
-        return "Error: All fields are required.", 400
+        print("[WEBAPP DEBUG] Creating TestRun object in database...")
+        new_run = TestRun(scan_name=scan_name)
+        db_session.add(new_run)
+        db_session.commit()
+        run_id = new_run.id
+        print(f"[WEBAPP DEBUG] TestRun created with ID: {run_id}")
 
-    new_run = TestRun(scan_name=scan_name)
-    db_session.add(new_run)
-    db_session.commit()
+        print("[WEBAPP DEBUG] Preparing to send task to Dramatiq...")
+        execute_full_scan.send(
+            run_id, 
+            scan_name, 
+            api_endpoint, 
+            api_key, 
+            api_model_identifier
+        )
+        print(f"[WEBAPP DEBUG] Task for run_id {run_id} sent successfully.")
+        
+        print("[WEBAPP DEBUG] Redirecting to index...")
+        return redirect(url_for("main.index"))
 
-    # Pass the key from the form to the scanner
-    start_scan_thread(
-        new_run.id, scan_name, api_endpoint, api_key, api_model_identifier
-    )
-
-    return redirect(url_for("main.index"))
+    except Exception as e:
+        # --- THIS IS THE CRITICAL DEBUGGING CODE ---
+        # If ANY error happens in the block above, it will be caught here.
+        print("\n" + "="*50)
+        print("!!!!!! A CRITICAL ERROR OCCURRED IN run_new_scan !!!!!!")
+        print(f"ERROR TYPE: {type(e).__name__}")
+        print(f"ERROR DETAILS: {e}")
+        print("\n--- FULL TRACEBACK ---")
+        traceback.print_exc()
+        print("="*50 + "\n")
+        
+        # Return a 500 error response, but now the log will have the details.
+        return "A critical server error occurred. Please check the webapp logs.", 500
 
 
 @main.route("/api/results/<int:run_id>")
@@ -293,7 +301,7 @@ def api_results(run_id):
             # baseline_status": r.baseline_status,
             "garak_status": r.garak_status,
             "llama_guard_status": r.llama_guard_status,
-            "judge_status": r.judge_status,
+            "judge_status": "FAIL" if r.assessment_details and any(t.get('is_undesirable') for t in r.assessment_details) else ("PASS" if r.assessment_details else "N/A"),
             "payload": r.payload,
             "response": r.response,
         }
@@ -453,7 +461,7 @@ def export_csv(run_id):
             "Category": r.owasp_category,
             "Status": r.status,
             # "Baseline": r.baseline_status,
-            "Judge": r.judge_status,
+            "Judge": "FAIL" if r.assessment_details and any(t.get('is_undesirable') for t in r.assessment_details) else ("PASS" if r.assessment_details else "N/A"),
             "Payload": r.payload,
             "Response": r.response,
         }
@@ -613,3 +621,64 @@ def runtime_logs_page():
         .all()
     )
     return render_template("runtime_logs.html", logs=logs)
+
+@main.route('/report/redteam/<int:run_id>')
+@login_required
+def red_team_report(run_id):
+    """
+    Generates a rich, dynamic, server-side rendered report for a given test run,
+    replicating the functionality of the "Grandma Guard Lite" results viewer.
+    """
+    current_run = db_session.query(TestRun).filter_by(id=run_id).first()
+    if not current_run:
+        abort(404)
+
+    previous_run = db_session.query(TestRun).filter(
+        TestRun.timestamp < current_run.timestamp
+    ).order_by(TestRun.timestamp.desc()).first()
+
+    # Create a lookup for the previous run's results.
+    # *** We will store the full result object to do a more nuanced comparison. ***
+    previous_results_lookup = {}
+    if previous_run:
+        for prev_result in previous_run.results:
+            if prev_result.assessment_details: # Only consider red team results
+                initial_payload_key = prev_result.payload.split('\n---')[0]
+                if initial_payload_key:
+                    previous_results_lookup[initial_payload_key] = prev_result
+
+    report_data = []
+    for result in current_run.results:
+        if not result.assessment_details:
+            continue
+            
+        initial_payload_key = result.payload.split('\n---')[0]
+        
+        # --- THIS IS THE NEW, CORRECTED REGRESSION LOGIC ---
+        regression_status = "NO_CHANGE"
+        prev_result_obj = previous_results_lookup.get(initial_payload_key)
+
+        # Determine the pass/fail status based purely on the conversational assessment
+        current_test_passed = not any(t.get('is_undesirable') for t in result.assessment_details)
+
+        if prev_result_obj:
+            previous_test_passed = not any(t.get('is_undesirable') for t in prev_result_obj.assessment_details)
+            
+            if not current_test_passed and previous_test_passed:
+                regression_status = "REGRESSION"
+            elif current_test_passed and not previous_test_passed:
+                regression_status = "IMPROVEMENT"
+        # --- END OF NEW LOGIC ---
+
+        report_data.append({
+            'result_obj': result,
+            'regression_status': regression_status,
+            'initial_payload': initial_payload_key,
+        })
+        
+    return render_template(
+        "red_team_report.html", 
+        run=current_run, 
+        report_data=report_data,
+        previous_run=previous_run
+    )

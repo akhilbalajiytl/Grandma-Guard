@@ -1,11 +1,12 @@
 #!/bin/bash
-# entrypoint.sh (Final, Most Robust Version)
+# entrypoint.sh (Final, Robust Orchestrator)
 
 set -e
 
+# Default to "web" if no command is provided
 COMMAND=${1:-web}
 
-echo "Executing command: $COMMAND"
+echo "Entrypoint received command: $COMMAND"
 
 # Only run the database wait logic for services that need the database on startup.
 if [[ "$COMMAND" == "web" || "$COMMAND" == "worker" || "$COMMAND" == "init_db" ]]; then
@@ -17,8 +18,7 @@ if [[ "$COMMAND" == "web" || "$COMMAND" == "worker" || "$COMMAND" == "init_db" ]
 
   echo "Waiting for database at $DB_HOST..."
 
-  # Use mysqladmin ping, the most reliable check.
-  # Waits up to 120 seconds.
+  # Use mysqladmin ping, the most reliable check. Waits up to 120 seconds.
   MAX_RETRIES=24
   i=0
   export MYSQL_PWD=$DB_PASS
@@ -34,24 +34,21 @@ if [[ "$COMMAND" == "web" || "$COMMAND" == "worker" || "$COMMAND" == "init_db" ]
   done
   
   unset MYSQL_PWD
-
   echo "Database is up and responsive!"
 fi
 
-
-# --- Execute commands based on mode ---
 if [ "$COMMAND" = "web" ]; then
   echo "Starting Web application..."
   exec gunicorn -c gunicorn.conf.py asgi:app
-
-elif [ "$COMMAND" = "worker" ]; then
-  echo "Starting Dramatiq worker..."
-  exec python -m dramatiq app.dramatiq_setup
 
 elif [ "$COMMAND" = "init_db" ]; then
   echo "Running database initialization script..."
   exec python init_db.py
 
 else
+  # This is a generic "pass-through" for any other command.
+  # It will execute the command we defined in docker-compose.yml,
+  # like "python -m dramatiq app.dramatiq_setup -p 1 --queues gpu"
+  echo "Executing custom command: $@"
   exec "$@"
 fi

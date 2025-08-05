@@ -64,12 +64,17 @@ services:
     networks:
       - llm_toolkit_net
 
-  # The worker also waits for db-init to complete successfully.
-  worker:
+  gpu-worker:
     build:
       context: .
       dockerfile: Dockerfile
-    command: ["/app/entrypoint.sh", "worker"]
+      target: dev-gpu  # IMPORTANT: This worker needs the GPU libraries
+    
+    # --- THIS IS THE KEY COMMAND ---
+    # We tell Dramatiq to start only ONE worker process (-p 1)
+    # and to ONLY watch the 'gpu' queue (--queues gpu).
+    command: ["/app/entrypoint.sh", "python", "-m", "dramatiq", "app.dramatiq_setup", "-p", "1", "--queues", "gpu"]
+    
     deploy:
       resources:
         reservations:

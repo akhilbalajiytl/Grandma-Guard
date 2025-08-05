@@ -64,66 +64,34 @@ else:
         exit(1)
     os.environ["DATABASE_URL"] = os.environ["DATABASE_URL_HOST"]
 
-
 # --- THIS IS THE FIX ---
 # Since the CLI is a separate entry point, it must initialize its own dependencies.
 # We do this *before* importing any other app modules that might need them.
 print("CLI Mode: Initializing Garak models...")
 try:
-    from app.scanner.garak_loader import _load_dependencies
-
-    _load_dependencies()
+    # We need to add app to the path to import from it
+    import sys
+    sys.path.append(project_root)
+    from app.scanner.garak_loader import get_analyzer
+    
+    get_analyzer() # This triggers the singleton loading process.
     print("✅ Garak models initialized for CLI run.")
 except Exception as e:
     print(f"❌ Failed to initialize Garak models: {e}")
     exit(1)
 # --- END OF FIX ---
 
-
 # Now we can safely import our app modules
 from app import db_session
 from app.models import TestRun
 from app.scanner.engine import start_scan_thread
 
-
 def main():
-    """Main CLI function for executing GrandmaGuard security scans.
-    
-    Parses command line arguments, sets up the database session, creates
-    a new test run record, and initiates the security scanning process.
-    The function handles the complete lifecycle of a CLI-based security scan.
-    
-    Command Line Arguments:
-        --scan-name: Descriptive name for the test run
-        --api-endpoint: Target API endpoint URL for scanning
-        --api-key: Authentication credentials for the API
-        --openai-model: Model to use for scan analysis (default: gpt-3.5-turbo)
-    
-    The function:
-    1. Parses and validates command line arguments
-    2. Creates a new test run in the database
-    3. Initiates the security scan with specified parameters
-    4. Waits for scan completion and reports results
-    
-    Raises:
-        SystemExit: If required arguments are missing or invalid
-        Exception: If database operations or scan initialization fails
-        
-    Note:
-        The function uses synchronous execution (wait=True) to ensure
-        the CLI process doesn't exit before scan completion.
-    """
-    parser = argparse.ArgumentParser(description="Run CI/CD Scan for the application")
+    parser = argparse.ArgumentParser(description="Run a security scan from the command line")
     parser.add_argument("--scan-name", required=True, help="Name of the test run")
-    parser.add_argument(
-        "--api-endpoint", required=True, help="API endpoint URL for the scan"
-    )
-    parser.add_argument("--api-key", required=True, help="API key for authentication")
-    parser.add_argument(
-        "--openai-model",
-        default="gpt-3.5-turbo",
-        help="OpenAI model name (default: gpt-3.5-turbo)",
-    )
+    parser.add_argument("--api-endpoint", required=True, help="API endpoint URL of the model to test")
+    parser.add_argument("--api-key", required=True, help="API key for the model to test")
+    parser.add_argument("--model-id", required=True, help="Model identifier (e.g., ilmu-v1.5, gpt-4o-mini)")
 
     args = parser.parse_args()
 
@@ -141,21 +109,16 @@ def main():
     finally:
         session.close()
 
+    # Call the engine with the 'wait=True' flag for CLI execution
     start_scan_thread(
         run_id,
         args.scan_name,
         args.api_endpoint,
         args.api_key,
-        args.openai_model,
+        args.model_id,
         wait=True,
     )
     print("CLI script finished.")
 
-
 if __name__ == "__main__":
-    """Main execution block for the CLI interface.
-    
-    Executes the main CLI function when the script is run directly,
-    providing command-line access to GrandmaGuard security scanning.
-    """
     main()

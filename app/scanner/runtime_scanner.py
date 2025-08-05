@@ -72,9 +72,24 @@ BLOCKED_RESPONSE_MESSAGE = (
     "I'm sorry, but this request has been blocked as it violates our safety policies."
 )
 
-# This is correct. We create one instance of our lightweight API clients.
-smart_classifier = SmartClassifier()
-llama_guard = LlamaGuardEvaluator()
+# --- Singleton Instances for our clients ---
+# These will hold the instances once they are created.
+_smart_classifier_instance = None
+_llama_guard_instance = None
+
+def get_smart_classifier():
+    """Lazy-loads and returns a single instance of the SmartClassifier."""
+    global _smart_classifier_instance
+    if _smart_classifier_instance is None:
+        _smart_classifier_instance = SmartClassifier()
+    return _smart_classifier_instance
+
+def get_llama_guard():
+    """Lazy-loads and returns a single instance of the LlamaGuardEvaluator."""
+    global _llama_guard_instance
+    if _llama_guard_instance is None:
+        _llama_guard_instance = LlamaGuardEvaluator()
+    return _llama_guard_instance
 
 async def scan_and_respond_in_realtime(prompt: str, model_config: dict):
     """Orchestrate multi-layered real-time security scanning for AI interactions.
@@ -179,6 +194,8 @@ async def scan_and_respond_in_realtime(prompt: str, model_config: dict):
         - Configurable policies allow customization for different use cases
     """
     forensic_analyzer = get_analyzer()
+    smart_classifier = get_smart_classifier()
+    llama_guard = get_llama_guard()
     final_response = ""
     llm_response_for_log = ""
     risk_profile = {}

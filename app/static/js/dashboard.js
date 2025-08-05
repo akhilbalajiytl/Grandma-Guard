@@ -69,11 +69,16 @@ let myChart = null;
  */
 async function loadRunDetails(runId) {
     // Fetch scan results from backend API
+    // Highlight the active run in the sidebar
+    document.querySelectorAll('.run-item').forEach(item => item.classList.remove('active'));
+    document.querySelector(`.run-item[data-run-id='${runId}']`).classList.add('active');
+
     const response = await fetch(`/api/results/${runId}`);
     const data = await response.json();
 
-    // Update dashboard header with scan information
     document.getElementById('current-model-name').innerText = `Results for: ${data.scan_name}`;
+    // We will add a new element to display the score
+    document.getElementById('current-model-score').innerText = `${(data.overall_score * 100).toFixed(1)}%`;
 
     // Initialize Chart.js context and destroy existing chart if present
     const ctx = document.getElementById('owasp-chart').getContext('2d');
@@ -133,7 +138,7 @@ async function loadRunDetails(runId) {
 
     data.detailed_results.forEach(result => {
         const row = tableBody.insertRow();
-
+        row.id = `result-row-${result.id}`;
         // Apply color-coded status indicators for quick security assessment
         switch (result.status) {
             case 'FAIL':
@@ -158,9 +163,13 @@ async function loadRunDetails(runId) {
         const responseCell = row.insertCell();
         const garakCell = row.insertCell();
         const llamaGuardCell = row.insertCell();
-        const judgeCell = row.insertCell();
+        const judgeCell = row.insertCell(); // This cell is for 'judge_status'
         const statusCell = row.insertCell();
         const actionsCell = row.insertCell();
+
+        // Give the status and actions cells IDs so we can easily update them
+        statusCell.id = `status-cell-${result.id}`;
+        actionsCell.id = `actions-cell-${result.id}`;
 
         // Populate security category information
         categoryCell.textContent = result.owasp_category;
@@ -180,29 +189,53 @@ async function loadRunDetails(runId) {
 
         // Enhanced LlamaGuard status display with category information
         const lgStatus = result.llama_guard_status;
-        if (lgStatus && lgStatus.status === 'UNSAFE') {
-            llamaGuardCell.innerHTML = `<span style="color: #ffb8b8; font-weight: bold;">${lgStatus.status}</span><br><small>(${lgStatus.category_name})</small>`;
-            llamaGuardCell.style.fontWeight = 'bold';
-        } else if (lgStatus) {
-            llamaGuardCell.textContent = lgStatus.status;
+
+        // Create a more structured and styled display for the Llama Guard result
+        if (lgStatus && typeof lgStatus === 'object') {
+            if (lgStatus.status === 'UNSAFE') {
+                // For UNSAFE, show the status prominently and the category below it.
+                // Use color-coding for at-a-glance understanding.
+                llamaGuardCell.innerHTML = `
+                <div style="color: #F87171; font-weight: bold;">${lgStatus.status}</div>
+                <small style="color: var(--text-muted);">(${lgStatus.category_name || 'No category'})</small>
+            `;
+            } else if (lgStatus.status === 'SAFE') {
+                // For SAFE, just show a green "SAFE" status.
+                llamaGuardCell.innerHTML = `<div style="color: #4ADE80; font-weight: bold;">${lgStatus.status}</div>`;
+            } else {
+                // Handle other statuses like SKIPPED or ERROR
+                llamaGuardCell.innerHTML = `<div style="color: #FACC15;">${lgStatus.status || 'Unknown'}</div>`;
+                if (lgStatus.reason) {
+                    llamaGuardCell.innerHTML += `<br><small style="color: var(--text-muted);">(${lgStatus.reason})</small>`;
+                }
+            }
         } else {
+            // Fallback for missing or malformed data
             llamaGuardCell.textContent = 'N/A';
         }
 
         // Display AI judge assessment results
-        judgeCell.textContent = result.judge_status;
-
-        // Display final security status with emphasis
+        judgeCell.textContent = result.judge_status || 'N/A'; // Let's ensure judge_status is populated
         statusCell.textContent = result.status;
         statusCell.style.fontWeight = 'bold';
 
-        // Add manual review action buttons for pending assessments
+        // Populate Final Security Status and the "View Full Report" link together
+        statusCell.innerHTML = `
+            <div style="font-weight: bold;">${result.status}</div>
+            <a href="/report/redteam/${runId}?result_id=${result.id}" class="btn" target="_blank" style="margin-top: 8px; font-size: 0.8em; padding: 6px 10px;">
+                View Details
+            </a>
+        `;
+
+        // Review Actions column is now ONLY for buttons
+        let actionsHTML = '';
         if (result.status === 'PENDING_REVIEW') {
-            actionsCell.innerHTML = `
-                <button class="action-btn pass" onclick="submitReview(${result.id}, 'PASS')">Approve (PASS)</button>
-                <button class="action-btn fail" onclick="submitReview(${result.id}, 'FAIL')">Reject (FAIL)</button>
+            actionsHTML = `
+                <button class="btn" style="background-color: #4ADE80; color: #1E2A2B;" onclick="submitReview(${result.id}, 'PASS')">Approve</button>
+                <button class="btn" style="background-color: #F87171; color: #1E2A2B; margin-top: 5px;" onclick="submitReview(${result.id}, 'FAIL')">Reject</button>
             `;
         }
+        actionsCell.innerHTML = actionsHTML;
     });
 }
 
@@ -231,28 +264,49 @@ async function loadRunDetails(runId) {
  * // Reject a test result as security violation
  * await submitReview(789, 'FAIL');
  */
-async function submitReview(resultId, newStatus) {
-    // Submit review decision to backend API
+async function submitReview(resultId, newStatus, runId) {
+    // 1. Visually disable the buttons to prevent double-clicking
+    const actionCell = document.getElementById(`actions-cell-${resultId}`);
+    actionCell.innerHTML = 'Submitting...';
+
+    // 2. Send the request to the backend
     const response = await fetch(`/api/review/${resultId}`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
     });
 
-    // Handle review submission response and refresh dashboard
     if (response.ok) {
-        // Refresh the currently active scan results to reflect the review
-        const activeRunItem = document.querySelector('.run-item.active');
-        if (activeRunItem && activeRunItem.dataset.runId) {
-            loadRunDetails(activeRunItem.dataset.runId);
-        } else {
-            // Fallback to full page reload if no active item found
-            location.reload();
-        }
+        const data = await response.json(); // The API now returns the new score
+
+        // 3. Update the UI directly - NO PAGE RELOAD
+
+        // Update the row's background color
+        const row = document.getElementById(`result-row-${resultId}`);
+        row.style.backgroundColor = newStatus === 'PASS'
+            ? 'rgba(39, 174, 96, 0.2)'
+            : 'rgba(192, 75, 75, 0.2)';
+
+        // Update the status text in the status cell
+        const statusCell = document.getElementById(`status-cell-${resultId}`);
+        // We find the div inside the cell and update its text
+        statusCell.querySelector('div').textContent = newStatus;
+
+        // Clear the action buttons from the actions cell
+        actionCell.innerHTML = '';
+
+        // Update the overall score at the top of the page
+        document.getElementById('current-model-score').innerText = `${(data.new_run_score * 100).toFixed(1)}%`;
+
+        // Optional: We can also re-fetch just the chart data to update it,
+        // but for now, this provides a great user experience.
+
     } else {
-        // Display user-friendly error message for failed submissions
-        alert("Failed to submit security review. Please try again.");
+        alert("Failed to submit review. Please try again.");
+        // Restore the buttons if the request failed
+        actionCell.innerHTML = `
+            <button class="btn pass" onclick="submitReview(${resultId}, 'PASS', ${runId})">Approve</button>
+            <button class="btn fail" onclick="submitReview(${resultId}, 'FAIL', ${runId})">Reject</button>
+        `;
     }
 }

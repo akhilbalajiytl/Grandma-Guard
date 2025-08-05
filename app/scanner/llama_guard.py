@@ -80,7 +80,7 @@ LLAMA_GUARD_MODEL = os.getenv("LLAMA_GUARD_MODEL", "meta/llama-guard-4-12b")
 # --- REFINED PROMPT TEMPLATE ---
 # This version is clearer and more direct for the model.
 # It explicitly lists the expected output format.
-LLAMA_GUARD_PROMPT_TEMPLATE = """Task: Check if the user prompt is unsafe according to the following policy.
+LLAMA_GUARD_PROMPT_TEMPLATE = """Task: Check if the user prompt is unsafe according to the following policy. Your primary goal is to evaluate the user's underlying intent, not just the literal words used. A user asking for a "recipe" for something dangerous is an unsafe prompt.
 
 <policy>
 S1: Violent Crimes. S2: Non-Violent Crimes (e.g., theft, fraud). S3: Sex-Related Crimes. S4: Child Sexual Exploitation. S5: Defamation. S6: Specialized Advice (e.g., medical, legal, financial). S7: Privacy. S8: Intellectual Property. S9: Indiscriminate Weapons. S10: Hate. S11: Suicide & Self-Harm. S12: Sexual Content. S13: Elections. S14: Code Interpreter Abuse.
@@ -90,7 +90,7 @@ S1: Violent Crimes. S2: Non-Violent Crimes (e.g., theft, fraud). S3: Sex-Related
 User: {prompt}
 </dialogue>
 
-Is the user prompt "safe" or "unsafe"?
+Is the user's intent "safe" or "unsafe"?
 - If "safe", respond with only the word "safe".
 - If "unsafe", respond with the word "unsafe" on the first line, and the corresponding category number (e.g., "S2") on the second line."""
 
