@@ -22,8 +22,9 @@
         .prompt-title { font-weight: 600; word-break: break-all; }
         .prompt-tags { display: flex; gap: 0.75rem; align-items: center; }
         .tag { font-size: 0.8rem; font-weight: 700; padding: 0.25rem 0.75rem; border-radius: 999px; }
-        .tag-pass { background-color: rgba(74, 222, 128, 0.2); color: #4ADE80; }
-        .tag-fail { background-color: rgba(248, 113, 113, 0.2); color: #F87171; }
+        .tag-pass { background-color: #28a745; color: #ffffff; }
+        .tag-fail { background-color: #dc3545; color: #ffffff; }
+        .tag-pending { background-color: #ffc107; color: #212529; }
         .tag-regression { background-color: #721c24; color: #f8d7da; border: 1px solid #f5c6cb; }
         .tag-improvement { background-color: #155724; color: #d4edda; border: 1px solid #c3e6cb; }
         .expand-icon { transition: transform 0.2s; font-size: 1.2rem; }
@@ -39,6 +40,39 @@
         .turn-number { font-weight: bold; color: var(--text-muted); }
         pre { max-height: 200px; overflow-y: auto; }
         .reasoning { margin-top: 1rem; padding: 1rem; background-color: rgba(245, 232, 215, 0.1); border-left: 3px solid var(--brand-orange); border-radius: 4px; }
+        
+        /* NEW: Diagnostic section styling */
+        .diagnostic-section { background-color: rgba(52, 152, 219, 0.05); padding: 1.5rem; margin-bottom: 1rem; border-radius: 8px; border: 1px solid rgba(52, 152, 219, 0.2); }
+        .diagnostic-overview { display: grid; grid-template-columns: 1fr; gap: 1rem; }
+        .decision-path { padding: 1rem; background-color: rgba(73, 80, 87, 0.9); border-radius: 6px; color: #ffffff; }
+        .confidence-badge { font-size: 0.75rem; padding: 0.2rem 0.5rem; border-radius: 999px; margin-left: 0.5rem; font-weight: bold; }
+        .confidence-high { background-color: rgba(74, 222, 128, 0.8); color: #ffffff; }
+        .confidence-medium { background-color: rgba(251, 191, 36, 0.8); color: #ffffff; }
+        .confidence-low { background-color: rgba(248, 113, 113, 0.8); color: #ffffff; }
+        
+        .tool-breakdown { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.5rem; }
+        .tool-result { padding: 0.75rem; background-color: rgba(73, 80, 87, 0.85); border-radius: 4px; font-size: 0.9rem; color: #ffffff; }
+        .tool-result small { color: rgba(255, 255, 255, 0.7); }
+        
+        .risk-factors { margin-top: 1rem; }
+        .risk-item { padding: 0.25rem 0; font-size: 0.9rem; }
+        .risk-type { font-weight: bold; color: #dc3545; }
+        .risk-score { color: var(--text-muted); font-size: 0.8rem; }
+        
+        .recommendations { margin-top: 1rem; }
+        .recommendations li { margin-left: 1rem; margin-bottom: 0.25rem; font-size: 0.9rem; }
+        
+        .section-divider { margin: 1.5rem 0; border: none; border-top: 2px solid var(--border-color); }
+        
+        .security-context { margin-top: 1rem; padding: 0.75rem; background-color: rgba(220, 53, 69, 0.05); border-radius: 4px; }
+        .risk-badge { display: inline-block; background-color: rgba(220, 53, 69, 0.1); color: #dc3545; padding: 0.2rem 0.5rem; margin: 0.2rem; border-radius: 999px; font-size: 0.75rem; }
+        .tag-security { background-color: rgba(108, 117, 125, 0.2); color: #6c757d; }
+        
+        /* NEW: Status indicator colors for diagnostic tool results */
+        .status-pass { color: #28a745; font-weight: bold; }
+        .status-fail { color: #dc3545; font-weight: bold; }
+        .status-safe { color: #28a745; font-weight: bold; }
+        .status-unsafe { color: #dc3545; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -60,7 +94,10 @@
                     Compared against: {{ previous_run.scan_name if previous_run else "No previous run" }}
                 </p>
             </div>
-            <a href="{{ url_for('main.export_csv', run_id=run.id) }}" class="btn">Export CSV</a>
+            <div style="display: flex; gap: 10px;">
+                <a href="{{ url_for('main.export_csv', run_id=run.id) }}" class="btn">Export CSV</a>
+                <a href="{{ url_for('main.export_pdf', run_id=run.id) }}" class="btn" style="background-color: var(--brand-orange); color: var(--brand-dark-teal);">Export PDF</a>
+            </div>
         </div>
 
         {# Overall Stats Cards #}
@@ -95,11 +132,73 @@
                 <div class="prompt-tags">
                     {% if item.regression_status == 'REGRESSION' %}<span class="tag tag-regression">REGRESSION</span>{% endif %}
                     {% if item.regression_status == 'IMPROVEMENT' %}<span class="tag tag-improvement">IMPROVEMENT</span>{% endif %}
-                    <span class="tag {{ 'tag-fail' if item.result_obj.status == 'FAIL' else 'tag-pass' }}">{{ item.result_obj.status }}</span>
+                    <span class="tag {% if item.result_obj.status == 'FAIL' %}tag-fail{% elif item.result_obj.status == 'PASS' %}tag-pass{% else %}tag-pending{% endif %}">{{ item.result_obj.status }}</span>
                     <span class="expand-icon">▼</span>
                 </div>
             </div>
             <div class="prompt-details">
+                {# NEW: Show diagnostic analysis if available #}
+                {% if item.diagnostic_info %}
+                <div class="diagnostic-section">
+                    <h4>Security Analysis Breakdown</h4>
+                    <div class="diagnostic-overview">
+                        <div class="decision-path">
+                            <strong>Decision Process:</strong> {{ item.diagnostic_info.decision_path.reasoning }}
+                            <span class="confidence-badge confidence-{{ item.diagnostic_info.decision_path.confidence.lower() }}">
+                                {{ item.diagnostic_info.decision_path.confidence }} CONFIDENCE
+                            </span>
+                        </div>
+                        
+                        <div class="tool-breakdown">
+                            <div class="tool-result">
+                                <strong>LlamaGuard:</strong> 
+                                <span class="{% if item.diagnostic_info.tool_breakdown.llama_guard.status == 'SAFE' %}status-safe{% elif item.diagnostic_info.tool_breakdown.llama_guard.status == 'UNSAFE' %}status-unsafe{% endif %}">
+                                    {{ item.diagnostic_info.tool_breakdown.llama_guard.status }}
+                                </span>
+                                <small>({{ item.diagnostic_info.tool_breakdown.llama_guard.weight_in_decision }})</small>
+                            </div>
+                            <div class="tool-result">
+                                <strong>AI Judge:</strong> 
+                                <span class="{% if item.diagnostic_info.tool_breakdown.ai_judge.status == 'PASS' %}status-pass{% elif item.diagnostic_info.tool_breakdown.ai_judge.status == 'FAIL' %}status-fail{% endif %}">
+                                    {{ item.diagnostic_info.tool_breakdown.ai_judge.status }}
+                                </span>
+                                <small>({{ item.diagnostic_info.tool_breakdown.ai_judge.weight_in_decision }})</small>
+                            </div>
+                            <div class="tool-result">
+                                <strong>Garak Scanner:</strong> 
+                                <span class="{% if item.diagnostic_info.tool_breakdown.garak_scanner.status == 'PASS' %}status-pass{% elif item.diagnostic_info.tool_breakdown.garak_scanner.status == 'FAIL' %}status-fail{% endif %}">
+                                    {{ item.diagnostic_info.tool_breakdown.garak_scanner.status }}
+                                </span>
+                                <small>({{ item.diagnostic_info.tool_breakdown.garak_scanner.weight_in_decision }})</small>
+                            </div>
+                        </div>
+                        
+                        {% if item.diagnostic_info.risk_analysis %}
+                        <div class="risk-factors">
+                            <strong>Risk Factors Detected:</strong>
+                            {% for risk in item.diagnostic_info.risk_analysis %}
+                            <div class="risk-item">
+                                <span class="risk-type">{{ risk.type }}:</span> {{ risk.description }}
+                                {% if risk.score %}<span class="risk-score">({{ "%.2f"|format(risk.score) }})</span>{% endif %}
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                        
+                        {% if item.diagnostic_info.recommendations %}
+                        <div class="recommendations">
+                            <strong>Recommendations:</strong>
+                            {% for rec in item.diagnostic_info.recommendations %}
+                            <li>{{ rec }}</li>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                <hr class="section-divider">
+                {% endif %}
+                
+                <h4>Conversation Assessment (User-Defined Criteria)</h4>
                 {# Loop for each turn in the conversation #}
                 {% for turn in item.result_obj.assessment_details %}
                 <div class="turn-assessment">
@@ -116,11 +215,32 @@
                                     {{ 'Matches Desired' if turn.matches_desired else 'Not Desired' }}
                                 </span>
                             {% endif %}
+                            {# NEW: Show if this turn has additional security context #}
+                            {% if turn.get('llama_guard_status') %}
+                                <span class="tag tag-security">LG: 
+                                    <span class="{% if turn.llama_guard_status == 'SAFE' %}status-safe{% elif turn.llama_guard_status == 'UNSAFE' %}status-unsafe{% endif %}">
+                                        {{ turn.llama_guard_status }}
+                                    </span>
+                                </span>
+                            {% endif %}
+                            {% if turn.get('garak_risks') %}
+                                <span class="tag tag-security">Garak: {{ turn.garak_risks|length }} risks</span>
+                            {% endif %}
                         </div>
                     </div>
                     <strong>Prompt:</strong><pre>{{ turn.prompt }}</pre>
                     <strong>Response:</strong><pre>{{ turn.response }}</pre>
                     <div class="reasoning"><strong>Assessment:</strong> {{ turn.reasoning }}</div>
+                    
+                    {# NEW: Show additional security context if available #}
+                    {% if turn.get('garak_risks') %}
+                    <div class="security-context">
+                        <strong>Technical Risks Detected:</strong>
+                        {% for detector, score in turn.garak_risks.items() %}
+                        <span class="risk-badge">{{ detector }}: {{ "%.2f"|format(score) }}</span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
                 </div>
                 {% endfor %}
             </div>

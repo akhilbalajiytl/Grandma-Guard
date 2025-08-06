@@ -58,7 +58,88 @@
                     <label for="api_key">API Key:</label>
                     <input type="password" id="api_key" name="api_key" placeholder="Enter API Key here" required>
                 
+                    <!-- --- CHECKBOX --- -->
+                    <div style="margin-top: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+                        <input type="checkbox" id="llama_guard_soft_block" name="llama_guard_soft_block" value="true">
+                        <label for="llama_guard_soft_block" style="margin-bottom: 0; font-weight: normal;">
+                            Llama Guard Soft Block (Log unsafe prompts but do not block them)
+                        </label>
+
+                    </div>
                     <button type="submit">Start Scan</button>
+                </form>
+            </div>
+            <!-- --- LIVE TEST CARD --- -->
+            <div class="card" style="margin-top: 2rem;">
+                <h2>Live Test / Add Payload</h2>
+                <form id="live-test-form" action="{{ url_for('main.run_single_test') }}" method="POST">
+                    
+                    <label for="live-test-name">Test Name:</label>
+                    <input type="text" id="live-test-name" name="test_name" placeholder="e.g., DAN Jailbreak v6" required>
+
+                    <label for="live-test-category">Category:</label>
+                    <input type="text" id="live-test-category" name="category" value="Live Test - Ad Hoc" required>
+
+                    <!-- Group the label and textarea together -->
+                    <div>
+                        <label for="live-test-payload">Initial Prompt:</label>
+                        <textarea id="live-test-payload" name="payload" rows="3" required style="width: 100%;"></textarea>
+                    </div>
+
+                    <div id="follow-up-container">
+                        <!-- JavaScript will add follow-up fields here -->
+                    </div>
+                    <button type="button" class="btn" onclick="addFollowUpField()" style="font-size: 0.8em; padding: 6px 10px; margin-top: 5px;">+ Add Follow-up</button>
+                    
+                    <hr style="border-color: var(--border-color); margin: 1rem 0;">
+
+                    <p style="font-weight: bold;">This is a Red Team Test:</p>
+                    <label for="live-test-undesirable">Undesirable Outcome:</label>
+                    <textarea id="live-test-undesirable" name="undesirable_outcome" rows="2" style="width: 100%;"></textarea>
+                    
+                    <label for="live-test-desired">Desired Outcome (use '|' to separate):</label>
+                    <input type="text" id="live-test-desired" name="desired_outcome" style="width: 100%;">
+
+                    <hr style="border-color: var(--border-color); margin: 1rem 0;">
+
+                    <p style="font-weight: bold;">Target Model for Temporary Test:</p>
+                    <div id="temporary-run-config">
+                        <label for="live-test-model">Model Identifier:</label>
+                        <input type="text" id="live-test-model" name="live_test_model_identifier" value="gpt-4o-mini">
+                        
+                        <label for="live-test-endpoint">API Endpoint:</label>
+                        <input type="text" id="live-test-endpoint" name="live_test_api_endpoint" value="https://api.openai.com/v1/chat/completions">
+
+                        <label for="live-test-key">API Key:</label>
+                        <input type="password" id="live-test-key" name="live_test_api_key" placeholder="Enter API Key for this test">
+
+                        <div style="margin-top: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+                            <input type="checkbox" id="live_test_soft_block" name="live_test_soft_block" value="true">
+                            <label for="live_test_soft_block" style="margin-bottom: 0; font-weight: normal;">
+                                Llama Guard Soft Block
+                            </label>
+                        </div>
+                    </div>
+
+                    <hr style="border-color: var(--border-color); margin: 1rem 0;">
+
+                    <label>Save Options:</label>
+                    <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem;">
+                        <div>
+                            <input type="radio" id="save-temporary" name="save_option" value="temporary" checked>
+                            <label for="save-temporary">Run as a temporary, one-time test</label>
+                        </div>
+                        <div>
+                            <input type="radio" id="save-permanent" name="save_option" value="permanent">
+                            <label for="save-permanent">Permanently add to payloads.yml</label>
+                        </div>
+                    </div>
+                    
+                    <p style="font-size: 0.8em; color: var(--text-muted); margin-top: 1rem;">
+                        Note: For a technical (Garak/LlamaGuard) test, leave Undesirable/Desired Outcomes blank.
+                    </p>
+
+                    <button type="submit" style="width: 100%; margin-top: 1rem;">Run Live Test / Add to Payloads</button>
                 </form>
             </div>
             <div class="card" style="margin-top: 2rem;">

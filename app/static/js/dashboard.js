@@ -127,7 +127,7 @@ async function loadRunDetails(runId) {
         <th>AI Response</th>
         <th>Garak Analysis</th>
         <th>LlamaGuard Classification</th>
-        <th>AI Judge Assessment</th>
+        <th>AI Judge Assessment (gpt-4o-mini)</th>
         <th>Final Security Status</th>
         <th>Review Actions</th>
     `;
@@ -309,4 +309,40 @@ async function submitReview(resultId, newStatus, runId) {
             <button class="btn fail" onclick="submitReview(${resultId}, 'FAIL', ${runId})">Reject</button>
         `;
     }
+}
+
+function addFollowUpField() {
+    const container = document.getElementById('follow-up-container');
+    const newField = document.createElement('div');
+    newField.style.marginTop = '0.5rem';
+
+    // Create a textarea for the follow-up prompt
+    const textarea = document.createElement('textarea');
+    textarea.name = 'follow_up_payloads'; // Use the same name for all
+    textarea.rows = 2;
+    textarea.placeholder = `Follow-up Prompt #${container.children.length + 1}`;
+    textarea.style.width = '100%';
+
+    // Create a remove button
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.textContent = 'Remove';
+    removeBtn.className = 'btn';
+    removeBtn.style.fontSize = '0.7em';
+    removeBtn.style.padding = '4px 8px';
+    removeBtn.style.backgroundColor = '#F87171';
+    removeBtn.style.color = '#1E2A2B';
+    removeBtn.style.marginLeft = '5px';
+    removeBtn.onclick = function () {
+        container.removeChild(newField);
+    };
+
+    const wrapper = document.createElement('div');
+    wrapper.style.display = 'flex';
+    wrapper.style.alignItems = 'center';
+
+    wrapper.appendChild(textarea);
+    wrapper.appendChild(removeBtn);
+    newField.appendChild(wrapper);
+    container.appendChild(newField);
 }

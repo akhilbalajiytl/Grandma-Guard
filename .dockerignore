@@ -1,5 +1,16 @@
 # .dockerignore
 
+# Unwanted script files that keep reappearing
+test_proxy.py
+test_local_classifier.py
+test_api_key.py
+running_garak_programmatically.py
+prepare_finetune_data.py
+merge_model.py
+interactive_test.py
+generate_finance_payloads.py
+build_payloads.py
+
 # Ignore the virtual environment
 .venv
 venv

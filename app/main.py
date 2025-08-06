@@ -64,6 +64,8 @@ Notes:
 # app/main.py
 import os
 import traceback
+import yaml
+from datetime import datetime
 
 import pandas as pd
 from flask import Response, jsonify, redirect, render_template, request, url_for, flash, Blueprint, abort
@@ -152,6 +154,8 @@ def run_new_scan():
         api_model_identifier = request.form["api_model_identifier"]
         api_endpoint = request.form["api_endpoint"]
         api_key = request.form["api_key"]
+        
+        llama_guard_soft_block = request.form.get('llama_guard_soft_block') == 'true'
         print("[WEBAPP DEBUG] Form data retrieved successfully.")
 
         if not all([scan_name, api_model_identifier, api_endpoint, api_key]):
@@ -168,10 +172,11 @@ def run_new_scan():
         print("[WEBAPP DEBUG] Preparing to send task to Dramatiq...")
         execute_full_scan.send(
             run_id, 
-            scan_name, 
+            scan_name,
             api_endpoint, 
             api_key, 
-            api_model_identifier
+            api_model_identifier,
+            llama_guard_soft_block
         )
         print(f"[WEBAPP DEBUG] Task for run_id {run_id} sent successfully.")
         
@@ -483,6 +488,146 @@ def export_csv(run_id):
     )
 
 
+@main.route("/api/export/<int:run_id>/pdf")
+@login_required
+def export_pdf(run_id):
+    """Export Red Team Report to a professional PDF format.
+    
+    Generates a comprehensive, formatted PDF report containing all test results,
+    diagnostic analysis, and security assessments for the specified run.
+    
+    Args:
+        run_id (int): Database ID of the test run to export
+        
+    Returns:
+        Response: PDF file download with appropriate headers
+        
+    PDF Contents:
+        - Executive Summary with key metrics
+        - Detailed Security Analysis Breakdown
+        - Individual Test Case Results with diagnostic information
+        - Turn-by-turn conversation assessments
+        - Risk factor analysis and recommendations
+        
+    Status Codes:
+        200: Successful PDF generation and download
+        404: Test run not found
+        500: PDF generation error
+        
+    Headers:
+        - Content-Type: application/pdf
+        - Content-Disposition: attachment with filename pattern RedTeamReport_run_{id}_{name}.pdf
+        
+    Notes:
+        - Uses WeasyPrint for professional PDF generation
+        - Includes company branding and professional styling
+        - Preserves color coding and diagnostic information
+        - Suitable for executive reporting and compliance documentation
+    """
+    try:
+        # Get the current run and previous run data (reuse logic from red_team_report)
+        current_run = db_session.query(TestRun).filter_by(id=run_id).first()
+        if not current_run:
+            return "Run not found", 404
+
+        previous_run = db_session.query(TestRun).filter(
+            TestRun.timestamp < current_run.timestamp
+        ).order_by(TestRun.timestamp.desc()).first()
+
+        # Create a lookup for the previous run's results
+        previous_results_lookup = {}
+        if previous_run:
+            for prev_result in previous_run.results:
+                if prev_result.assessment_details:
+                    initial_payload_key = prev_result.payload.split('\n---')[0]
+                    if initial_payload_key:
+                        previous_results_lookup[initial_payload_key] = prev_result
+
+        # Generate report data with diagnostic analysis
+        from .scanner.diagnostic_analyzer import DiagnosticAnalyzer
+        diagnostic_analyzer = DiagnosticAnalyzer()
+        report_data = []
+        
+        for result in current_run.results:
+            if not result.assessment_details:
+                continue
+                
+            initial_payload_key = result.payload.split('\n---')[0]
+            
+            # Generate diagnostic analysis
+            diagnostic_info = None
+            if hasattr(result, 'llama_guard_status') and hasattr(result, 'garak_status'):
+                # Parse garak_status back to risk_profile format
+                risk_profile = {}
+                if result.garak_status and ':' in result.garak_status:
+                    detector, score_str = result.garak_status.split(':')
+                    try:
+                        risk_profile[detector] = float(score_str)
+                    except ValueError:
+                        risk_profile = {}
+                
+                diagnostic_info = diagnostic_analyzer.generate_diagnostic_report(
+                    result.assessment_details,
+                    result.llama_guard_status or {},
+                    risk_profile,
+                    result.status
+                )
+            
+            # Regression analysis
+            regression_status = "NO_CHANGE"
+            prev_result_obj = previous_results_lookup.get(initial_payload_key)
+
+            current_test_passed = not any(t.get('is_undesirable') for t in result.assessment_details)
+
+            if prev_result_obj:
+                previous_test_passed = not any(t.get('is_undesirable') for t in prev_result_obj.assessment_details)
+                
+                if not current_test_passed and previous_test_passed:
+                    regression_status = "REGRESSION"
+                elif current_test_passed and not previous_test_passed:
+                    regression_status = "IMPROVEMENT"
+
+            report_data.append({
+                'result_obj': result,
+                'regression_status': regression_status,
+                'initial_payload': initial_payload_key,
+                'diagnostic_info': diagnostic_info
+            })
+
+        # Render the PDF template
+        html_content = render_template(
+            'pdf_report.html',
+            run=current_run,
+            report_data=report_data,
+            previous_run=previous_run
+        )
+        
+        # Generate PDF
+        import weasyprint
+        from io import BytesIO
+        
+        pdf_buffer = BytesIO()
+        weasyprint.HTML(string=html_content, base_url=request.url_root).write_pdf(pdf_buffer)
+        pdf_buffer.seek(0)
+        
+        # Create response
+        response = Response(
+            pdf_buffer.read(),
+            mimetype='application/pdf',
+            headers={
+                'Content-Disposition': f'attachment; filename=RedTeamReport_run_{run_id}_{current_run.scan_name}.pdf'
+            }
+        )
+        
+        return response
+        
+    except Exception as e:
+        print(f"PDF generation error: {e}")
+        import traceback
+        traceback.print_exc()
+        return f"Error generating PDF: {str(e)}", 500
+
+
 # --- THE LLM FIREWALL/PROXY ENDPOINT ---
 @main.route("/proxy/v1/chat/completions", methods=["POST"])
 async def proxy_chat_completions():
@@ -626,9 +771,11 @@ def runtime_logs_page():
 @login_required
 def red_team_report(run_id):
     """
-    Generates a rich, dynamic, server-side rendered report for a given test run,
-    replicating the functionality of the "Grandma Guard Lite" results viewer.
+    Enhanced Red Team Report: Shows both user-defined assessment criteria 
+    AND technical security analysis with diagnostic explanations.
     """
+    from .scanner.diagnostic_analyzer import DiagnosticAnalyzer
+    
     current_run = db_session.query(TestRun).filter_by(id=run_id).first()
     if not current_run:
         abort(404)
@@ -638,7 +785,6 @@ def red_team_report(run_id):
     ).order_by(TestRun.timestamp.desc()).first()
 
     # Create a lookup for the previous run's results.
-    # *** We will store the full result object to do a more nuanced comparison. ***
     previous_results_lookup = {}
     if previous_run:
         for prev_result in previous_run.results:
@@ -647,18 +793,38 @@ def red_team_report(run_id):
                 if initial_payload_key:
                     previous_results_lookup[initial_payload_key] = prev_result
 
+    diagnostic_analyzer = DiagnosticAnalyzer()
     report_data = []
+    
     for result in current_run.results:
         if not result.assessment_details:
             continue
             
         initial_payload_key = result.payload.split('\n---')[0]
         
-        # --- THIS IS THE NEW, CORRECTED REGRESSION LOGIC ---
+        # Generate diagnostic analysis
+        diagnostic_info = None
+        if hasattr(result, 'llama_guard_status') and hasattr(result, 'garak_status'):
+            # Parse garak_status back to risk_profile format
+            risk_profile = {}
+            if result.garak_status and ':' in result.garak_status:
+                detector, score_str = result.garak_status.split(':')
+                try:
+                    risk_profile[detector] = float(score_str)
+                except ValueError:
+                    risk_profile = {}
+            
+            diagnostic_info = diagnostic_analyzer.generate_diagnostic_report(
+                result.assessment_details,
+                result.llama_guard_status or {},
+                risk_profile,
+                result.status
+            )
+        
+        # Regression analysis
         regression_status = "NO_CHANGE"
         prev_result_obj = previous_results_lookup.get(initial_payload_key)
 
-        # Determine the pass/fail status based purely on the conversational assessment
         current_test_passed = not any(t.get('is_undesirable') for t in result.assessment_details)
 
         if prev_result_obj:
@@ -668,12 +834,12 @@ def red_team_report(run_id):
                 regression_status = "REGRESSION"
             elif current_test_passed and not previous_test_passed:
                 regression_status = "IMPROVEMENT"
-        # --- END OF NEW LOGIC ---
 
         report_data.append({
             'result_obj': result,
             'regression_status': regression_status,
             'initial_payload': initial_payload_key,
+            'diagnostic_info': diagnostic_info  # NEW: Add diagnostic analysis
         })
         
     return render_template(
@@ -682,3 +848,76 @@ def red_team_report(run_id):
         report_data=report_data,
         previous_run=previous_run
     )
+    
+@main.route("/run-single-test", methods=["POST"])
+@login_required
+def run_single_test():
+    # --- 1. Extract Test Case Data ---
+    form_data = request.form
+    save_option = form_data.get("save_option")
+    follow_ups = form_data.getlist('follow_up_payloads')
+    test_name = form_data.get("test_name", "Unnamed Live Test")
+    
+    # DEBUG: Log the follow-up data
+    print(f"DEBUG: Extracted follow_ups: {follow_ups}")
+    print(f"DEBUG: Cleaned follow_ups: {[f for f in follow_ups if f.strip()]}")
+    
+    test_case_data = {
+        "category": form_data.get("category", "Ad-Hoc Test"),
+        "payload": form_data.get("payload", ""),
+        "follow_up_payloads": [f for f in follow_ups if f.strip()],
+    }
+    # Only add red team fields if they are provided
+    undesirable_outcome = form_data.get("undesirable_outcome", "")
+    if undesirable_outcome.strip():
+        test_case_data["undesirable_outcome"] = undesirable_outcome.strip()
+        test_case_data["desired_outcome"] = form_data.get("desired_outcome", "").strip()
+    
+    # --- 2. Handle 'Permanent' Save Option ---
+    if save_option == "permanent":
+        payloads_file = "app/scanner/payloads.yml"
+        try:
+            with open(payloads_file, 'r') as f:
+                payloads = yaml.safe_load(f) or {}
+            # Sanitize the name to make it a valid YAML key (no spaces, lowercase)
+            new_key = test_name.lower().replace(' ', '_').replace('-', '_')
+            # Add a timestamp to ensure uniqueness
+            timestamp = datetime.now().strftime("%S")
+            new_key = f"{new_key}_{timestamp}"
+            payloads[new_key] = test_case_data
+            
+            with open(payloads_file, 'w') as f:
+                yaml.dump(payloads, f, sort_keys=False, indent=2)
+            
+            flash(f"Successfully added new payload '{test_name}' (key: {new_key}) to payloads.yml!", "success")
+        except Exception as e:
+            flash(f"Error saving to payloads.yml: {e}", "error")
+        
+        return redirect(url_for("main.index"))
+
+    elif save_option == "temporary":
+        from .tasks import execute_single_test
+        api_config = {
+            "endpoint": form_data.get("live_test_api_endpoint"),
+            "key": form_data.get("live_test_api_key"),
+            "model_id": form_data.get("live_test_model_identifier")
+        }
+        llama_guard_soft_block = form_data.get('live_test_soft_block') == 'true'
+        
+        if not all(api_config.values()):
+            flash("For a temporary test, you must provide the Model, Endpoint, and API Key.", "error")
+            return redirect(url_for("main.index"))
+
+        # --- USE THE NEW TEST NAME FOR THE SCAN NAME ---
+        scan_name = f"Temporary Test: {test_name}"
+        # --- END OF CHANGE ---
+        new_run = TestRun(scan_name=scan_name)
+        db_session.add(new_run)
+        db_session.commit()
+
+        execute_single_test.send(new_run.id, test_case_data, api_config, llama_guard_soft_block)
+        flash(f"Started temporary scan '{scan_name}'. Results will appear shortly.", "success")
+        return redirect(url_for("main.index"))
+
+    flash("Invalid save option selected.", "error")
+    return redirect(url_for("main.index"))

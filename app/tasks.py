@@ -179,7 +179,7 @@ def run_forensic_analysis(log_id: int):
             session.close()
             
 @dramatiq.actor(queue_name="gpu", max_retries=1, time_limit=3600000)
-def execute_full_scan(run_id, scan_name, api_endpoint, api_key, api_model_identifier):
+def execute_full_scan(run_id, scan_name, api_endpoint, api_key, api_model_identifier, llama_guard_soft_block=False):
     """
     Dramatiq task to run the entire hybrid security scan in the background.
     """
@@ -191,8 +191,66 @@ def execute_full_scan(run_id, scan_name, api_endpoint, api_key, api_model_identi
 
     print(f"BACKGROUND WORKER: Starting scan for run_id: {run_id}")
     try:
-        run_scan(run_id, scan_name, api_endpoint, api_key, api_model_identifier)
+        run_scan(run_id, scan_name, api_endpoint, api_key, api_model_identifier, llama_guard_soft_block)
         print(f"BACKGROUND WORKER: Scan for run_id {run_id} completed successfully.")
     except Exception as e:
         print(f"BACKGROUND WORKER: A critical error occurred during scan for run_id {run_id}: {e}")
         raise
+    
+@dramatiq.actor(queue_name="gpu", max_retries=0)
+def execute_single_test(run_id, test_case_data, api_config, llama_guard_soft_block=False):
+    """
+    Dramatiq task to run a single, ad-hoc test case.
+    """
+    # We need to import the engine components inside the task
+    import asyncio
+    from .scanner.engine import process_redteam_case, process_technical_case, db_session, TestRun
+    from .scanner.llm_assessor import LLMAssessor
+    from .scanner.llama_guard import LlamaGuardEvaluator
+    from .scanner.garak_loader import get_analyzer
+    import aiohttp
+
+    print(f"BACKGROUND WORKER: Starting single test for run_id: {run_id} with soft_block={llama_guard_soft_block}")
+    
+    tools = {
+        "assessor": LLMAssessor(),
+        "llama_guard": LlamaGuardEvaluator(),
+        "forensic_analyzer": get_analyzer()
+    }
+    
+    session = db_session()
+    try:
+        async def run():
+            async with aiohttp.ClientSession() as http_session:
+                if "undesirable_outcome" in test_case_data:
+                    # Red team cases don't use the Llama Guard block, so no change needed here.
+                    await process_redteam_case(http_session, session, tools, run_id, test_case_data, api_config)
+                else:
+                    # --- THIS IS THE FIX ---
+                    # Pass the llama_guard_soft_block flag to the technical case processor.
+                    await process_technical_case(
+                        http_session, 
+                        session, 
+                        tools, 
+                        run_id, 
+                        test_case_data, 
+                        api_config, 
+                        llama_guard_soft_block 
+                    )
+                    
+        asyncio.run(run())
+
+        # Update the overall score (it will be 0 or 100)
+        # Rename the variable to avoid collision with the function name.
+        test_run_to_update = session.query(TestRun).get(run_id)
+        if test_run_to_update and test_run_to_update.results:
+            test_run_to_update.overall_score = 1.0 if test_run_to_update.results[0].status == 'PASS' else 0.0
+
+        session.commit()
+        print(f"BACKGROUND WORKER: Single test for run_id {run_id} completed.")
+    except Exception as e:
+        print(f"BACKGROUND WORKER: Error in single test for run_id {run_id}: {e}")
+        session.rollback()
+        raise
+    finally:
+        session.close()

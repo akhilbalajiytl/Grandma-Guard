@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Red Team Security Report - {{ run.scan_name }}</title>
+    <style>
+        /* PDF-specific styling for professional reports */
+        @page {
+            size: A4;
+            margin: 1in;
+            @top-center {
+                content: "Grandma Guard - Red Team Security Report";
+                font-family: Arial, sans-serif;
+                font-size: 10px;
+                color: #666;
+            }
+            @bottom-center {
+                content: "Page " counter(page) " of " counter(pages);
+                font-family: Arial, sans-serif;
+                font-size: 10px;
+                color: #666;
+            }
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            font-size: 11px;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 3px solid #2c5aa0;
+        }
+        
+        .logo-title {
+            color: #2c5aa0;
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        
+        .report-subtitle {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+        
+        .report-meta {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+        }
+        
+        .meta-item {
+            flex: 1;
+            text-align: center;
+        }
+        
+        .meta-label {
+            font-weight: bold;
+            color: #2c5aa0;
+            font-size: 10px;
+            text-transform: uppercase;
+        }
+        
+        .meta-value {
+            font-size: 12px;
+            margin-top: 5px;
+        }
+        
+        .executive-summary {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            border-left: 4px solid #2c5aa0;
+        }
+        
+        .summary-title {
+            color: #2c5aa0;
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 15px;
+        }
+        
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+        
+        .summary-card {
+            text-align: center;
+            padding: 10px;
+            background-color: white;
+            border-radius: 5px;
+            border: 1px solid #e0e0e0;
+        }
+        
+        .summary-number {
+            font-size: 18px;
+            font-weight: bold;
+            color: #2c5aa0;
+            margin-bottom: 5px;
+        }
+        
+        .summary-label {
+            font-size: 9px;
+            color: #666;
+            text-transform: uppercase;
+        }
+        
+        .test-case {
+            margin-bottom: 25px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            overflow: hidden;
+            page-break-inside: avoid;
+        }
+        
+        .test-header {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .test-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            word-wrap: break-word;
+        }
+        
+        .test-tags {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        
+        .tag {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 9px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        
+        .tag-pass {
+            background-color: #28a745;
+            color: white;
+        }
+        
+        .tag-fail {
+            background-color: #dc3545;
+            color: white;
+        }
+        
+        .tag-pending {
+            background-color: #ffc107;
+            color: #212529;
+        }
+        
+        .tag-regression {
+            background-color: #721c24;
+            color: #f8d7da;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .tag-improvement {
+            background-color: #155724;
+            color: #d4edda;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .test-content {
+            padding: 15px;
+        }
+        
+        .diagnostic-section {
+            background-color: #f1f3f4;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 5px;
+            border-left: 3px solid #2c5aa0;
+        }
+        
+        .diagnostic-title {
+            color: #2c5aa0;
+            font-size: 12px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        
+        .decision-process {
+            background-color: #495057;
+            color: white;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+        
+        .confidence-badge {
+            background-color: rgba(255, 255, 255, 0.2);
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-size: 8px;
+            margin-left: 5px;
+        }
+        
+        .tool-breakdown {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+        
+        .tool-result {
+            background-color: #495057;
+            color: white;
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 9px;
+        }
+        
+        .tool-result strong {
+            display: block;
+            margin-bottom: 3px;
+        }
+        
+        .status-pass {
+            color: #28a745;
+            font-weight: bold;
+        }
+        
+        .status-fail {
+            color: #dc3545;
+            font-weight: bold;
+        }
+        
+        .status-safe {
+            color: #28a745;
+            font-weight: bold;
+        }
+        
+        .status-unsafe {
+            color: #dc3545;
+            font-weight: bold;
+        }
+        
+        .risk-factors, .recommendations {
+            margin-top: 10px;
+            padding: 8px;
+            background-color: rgba(220, 53, 69, 0.1);
+            border-radius: 4px;
+        }
+        
+        .risk-factors strong, .recommendations strong {
+            color: #dc3545;
+            font-size: 10px;
+            margin-bottom: 5px;
+            display: block;
+        }
+        
+        .risk-item, .recommendations li {
+            font-size: 9px;
+            margin-bottom: 3px;
+        }
+        
+        .conversation-section {
+            margin-top: 15px;
+        }
+        
+        .conversation-title {
+            color: #2c5aa0;
+            font-size: 12px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        
+        .turn {
+            border: 1px solid #e0e0e0;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            overflow: hidden;
+        }
+        
+        .turn-header {
+            background-color: #f8f9fa;
+            padding: 8px 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .turn-number {
+            font-weight: bold;
+            color: #2c5aa0;
+            font-size: 10px;
+        }
+        
+        .turn-content {
+            padding: 10px;
+        }
+        
+        .prompt-text, .response-text {
+            margin-bottom: 8px;
+        }
+        
+        .prompt-text strong, .response-text strong {
+            color: #2c5aa0;
+            font-size: 10px;
+            display: block;
+            margin-bottom: 3px;
+        }
+        
+        .content-box {
+            background-color: #f8f9fa;
+            padding: 8px;
+            border-radius: 3px;
+            border-left: 3px solid #2c5aa0;
+            font-family: monospace;
+            font-size: 9px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            max-height: 120px;
+            overflow: hidden;
+        }
+        
+        .assessment {
+            background-color: rgba(245, 232, 215, 0.3);
+            padding: 8px;
+            border-radius: 3px;
+            border-left: 3px solid #ffc107;
+            font-size: 9px;
+        }
+        
+        .assessment strong {
+            color: #ffc107;
+            margin-bottom: 3px;
+            display: block;
+        }
+        
+        .page-break {
+            page-break-before: always;
+        }
+        
+        .section-divider {
+            height: 2px;
+            background-color: #e0e0e0;
+            margin: 20px 0;
+            border: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo-title">Grandma Guard</div>
+        <div class="report-subtitle">Red Team Security Assessment Report</div>
+        
+        <div class="report-meta">
+            <div class="meta-item">
+                <div class="meta-label">Scan Name</div>
+                <div class="meta-value">{{ run.scan_name }}</div>
+            </div>
+            <div class="meta-item">
+                <div class="meta-label">Run ID</div>
+                <div class="meta-value">#{{ run.id }}</div>
+            </div>
+            <div class="meta-item">
+                <div class="meta-label">Execution Date</div>
+                <div class="meta-value">{{ run.timestamp.strftime('%Y-%m-%d %H:%M UTC') if run.timestamp else 'N/A' }}</div>
+            </div>
+            <div class="meta-item">
+                <div class="meta-label">Compared Against</div>
+                <div class="meta-value">{{ previous_run.scan_name if previous_run else "No previous run" }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="executive-summary">
+        <div class="summary-title">Executive Summary</div>
+        <div class="summary-grid">
+            <div class="summary-card">
+                <div class="summary-number">{{ "%.1f"|format(run.overall_score * 100) }}%</div>
+                <div class="summary-label">Pass Rate</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-number">{{ report_data|selectattr('result_obj.status', 'equalto', 'FAIL')|list|length }}</div>
+                <div class="summary-label">Total Failures</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-number">{{ report_data|selectattr('regression_status', 'equalto', 'REGRESSION')|list|length }}</div>
+                <div class="summary-label">Regressions</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-number">{{ report_data|selectattr('regression_status', 'equalto', 'IMPROVEMENT')|list|length }}</div>
+                <div class="summary-label">Improvements</div>
+            </div>
+        </div>
+        
+        <p style="margin-top: 10px; font-size: 10px; color: #666;">
+            This report provides a comprehensive analysis of AI security assessments conducted using a multi-layered 
+            evaluation approach including LlamaGuard content classification, Garak technical vulnerability scanning, 
+            and AI Judge conversational assessment.
+        </p>
+    </div>
+
+    <div style="color: #2c5aa0; font-size: 16px; font-weight: bold; margin-bottom: 20px; border-bottom: 1px solid #e0e0e0; padding-bottom: 10px;">
+        Detailed Test Results
+    </div>
+
+    {% for item in report_data %}
+    <div class="test-case">
+        <div class="test-header">
+            <div class="test-title">{{ item.initial_payload | truncate(100) }}</div>
+            <div class="test-tags">
+                {% if item.regression_status == 'REGRESSION' %}
+                <span class="tag tag-regression">Regression</span>
+                {% endif %}
+                {% if item.regression_status == 'IMPROVEMENT' %}
+                <span class="tag tag-improvement">Improvement</span>
+                {% endif %}
+                <span class="tag {% if item.result_obj.status == 'FAIL' %}tag-fail{% elif item.result_obj.status == 'PASS' %}tag-pass{% else %}tag-pending{% endif %}">
+                    {{ item.result_obj.status }}
+                </span>
+            </div>
+        </div>
+        
+        <div class="test-content">
+            {% if item.diagnostic_info %}
+            <div class="diagnostic-section">
+                <div class="diagnostic-title">Security Analysis Breakdown</div>
+                
+                <div class="decision-process">
+                    <strong>Decision Process:</strong> {{ item.diagnostic_info.decision_path.reasoning }}
+                    <span class="confidence-badge">{{ item.diagnostic_info.decision_path.confidence }} CONFIDENCE</span>
+                </div>
+                
+                <div class="tool-breakdown">
+                    <div class="tool-result">
+                        <strong>LlamaGuard:</strong>
+                        <span class="{% if item.diagnostic_info.tool_breakdown.llama_guard.status == 'SAFE' %}status-safe{% elif item.diagnostic_info.tool_breakdown.llama_guard.status == 'UNSAFE' %}status-unsafe{% endif %}">
+                            {{ item.diagnostic_info.tool_breakdown.llama_guard.status }}
+                        </span>
+                        <br><small>{{ item.diagnostic_info.tool_breakdown.llama_guard.weight_in_decision }}</small>
+                    </div>
+                    <div class="tool-result">
+                        <strong>AI Judge:</strong>
+                        <span class="{% if item.diagnostic_info.tool_breakdown.ai_judge.status == 'PASS' %}status-pass{% elif item.diagnostic_info.tool_breakdown.ai_judge.status == 'FAIL' %}status-fail{% endif %}">
+                            {{ item.diagnostic_info.tool_breakdown.ai_judge.status }}
+                        </span>
+                        <br><small>{{ item.diagnostic_info.tool_breakdown.ai_judge.weight_in_decision }}</small>
+                    </div>
+                    <div class="tool-result">
+                        <strong>Garak Scanner:</strong>
+                        <span class="{% if item.diagnostic_info.tool_breakdown.garak_scanner.status == 'PASS' %}status-pass{% elif item.diagnostic_info.tool_breakdown.garak_scanner.status == 'FAIL' %}status-fail{% endif %}">
+                            {{ item.diagnostic_info.tool_breakdown.garak_scanner.status }}
+                        </span>
+                        <br><small>{{ item.diagnostic_info.tool_breakdown.garak_scanner.weight_in_decision }}</small>
+                    </div>
+                </div>
+                
+                {% if item.diagnostic_info.risk_analysis %}
+                <div class="risk-factors">
+                    <strong>Risk Factors Detected:</strong>
+                    {% for risk in item.diagnostic_info.risk_analysis %}
+                    <div class="risk-item">
+                        {{ risk.type }}: {{ risk.description }}
+                        {% if risk.score %} ({{ "%.2f"|format(risk.score) }}){% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                
+                {% if item.diagnostic_info.recommendations %}
+                <div class="recommendations">
+                    <strong>Recommendations:</strong>
+                    {% for rec in item.diagnostic_info.recommendations %}
+                    <li>{{ rec }}</li>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+            
+            <div class="conversation-section">
+                <div class="conversation-title">Conversation Assessment</div>
+                
+                {% for turn in item.result_obj.assessment_details %}
+                <div class="turn">
+                    <div class="turn-header">
+                        <span class="turn-number">Turn {{ turn.turn }}</span>
+                        <div class="test-tags">
+                            {% if turn.is_undesirable %}
+                                <span class="tag tag-fail">Undesirable</span>
+                            {% else %}
+                                <span class="tag tag-pass">Safe</span>
+                            {% endif %}
+                            {% if turn.get('matches_desired') is not none %}
+                                <span class="tag {{ 'tag-pass' if turn.matches_desired else 'tag-fail' }}">
+                                    {{ 'Matches Desired' if turn.matches_desired else 'Not Desired' }}
+                                </span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="turn-content">
+                        <div class="prompt-text">
+                            <strong>Prompt:</strong>
+                            <div class="content-box">{{ turn.prompt }}</div>
+                        </div>
+                        <div class="response-text">
+                            <strong>Response:</strong>
+                            <div class="content-box">{{ turn.response }}</div>
+                        </div>
+                        <div class="assessment">
+                            <strong>Assessment:</strong> {{ turn.reasoning }}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+    
+    <div class="page-break"></div>
+    <div style="text-align: center; color: #666; font-size: 10px; margin-top: 50px;">
+        <p><strong>Report Generated:</strong> {{ moment().format('YYYY-MM-DD HH:mm UTC') if moment else 'N/A' }}</p>
+        <p><strong>Grandma Guard Security Platform</strong> - Comprehensive AI Safety Assessment</p>
+        <p>This report contains confidential security assessment data and should be handled according to your organization's data classification policies.</p>
+    </div>
+</body>
+</html>

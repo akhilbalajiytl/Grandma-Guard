@@ -17,3 +17,4 @@ PyYAML
 PyJWT
 Jinja2
 asgiref
+weasyprint  # For PDF generation
