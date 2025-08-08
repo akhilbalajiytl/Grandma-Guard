@@ -58,9 +58,14 @@ Notes:
 
 # app/tasks.py
 import dramatiq
+from dramatiq.brokers.redis import RedisBroker
 
-# DO NOT import 'app' or 'db_session' at the top level here.
-# This prevents the chain reaction of model loading.
+# A 24-hour time limit in milliseconds. This is effectively infinite for our purposes.
+TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000 
+
+# Configure the broker
+redis_broker = RedisBroker(host="redis")
+dramatiq.set_broker(redis_broker)
 
 @dramatiq.actor(queue_name="gpu", max_retries=3, time_limit=300000)
 def run_forensic_analysis(log_id: int):
@@ -134,26 +139,25 @@ def run_forensic_analysis(log_id: int):
         - Thread-safe database operations
     """
     # --- DYNAMIC IMPORTS INSIDE THE TASK ---
+    # Import what we need only when the task is actually running.
+    # By this time, the web app and db will be fully initialized.
     print(f"🔬 Background task started for RuntimeLog ID: {log_id}")
     from . import app, db_session
     from .models import RuntimeLog
     from .scanner.garak_loader import get_analyzer
 
-    session = None  # Initialize session to None
-    try:
-        with app.app_context():
-            session = db_session()
+    with app.app_context():
+        session = db_session()
+        try:
             log_entry = session.query(RuntimeLog).filter_by(id=log_id).one_or_none()
-
             if not log_entry:
-                print(f"❌ Could not find RuntimeLog ID: {log_id}. Task will not be retried.")
-                # This is a "clean" failure, no need to retry.
+                print(f"❌ Could not find RuntimeLog ID: {log_id}")
                 return
 
-            # Proceed with analysis
             log_entry.forensic_status = "RUNNING"
             session.commit()
 
+            # Get the pre-loaded analyzer instance
             forensic_analyzer = get_analyzer()
             full_risk_profile = forensic_analyzer.analyze(
                 log_entry.user_prompt, log_entry.llm_response
@@ -163,94 +167,144 @@ def run_forensic_analysis(log_id: int):
             log_entry.forensic_status = "COMPLETE"
             print(f"✅ Forensic analysis complete for RuntimeLog ID: {log_id}")
 
-    except Exception as e:
-        print(f"❌ Error during forensic analysis for log {log_id}: {e}")
-        # If an error occurs, try to update the log entry's status to "ERROR"
-        if session and 'log_entry' in locals() and log_entry:
-            log_entry.forensic_status = "ERROR"
+        except Exception as e:
+            # It's good practice to try and update the status to ERROR
+            if 'log_entry' in locals() and log_entry:
+                log_entry.forensic_status = "ERROR"
+            print(f"❌ Error during forensic analysis for log {log_id}: {e}")
+        finally:
             session.commit()
-        # Re-raise the exception to trigger Dramatiq's retry mechanism.
-        # After max_retries, the message will be discarded.
-        raise
-
-    finally:
-        # Always ensure the session is closed.
-        if session:
             session.close()
-            
-@dramatiq.actor(queue_name="gpu", max_retries=1, time_limit=3600000)
-def execute_full_scan(run_id, scan_name, api_endpoint, api_key, api_model_identifier, llama_guard_soft_block=False):
-    """
-    Dramatiq task to run the entire hybrid security scan in the background.
-    """
-    # --- THIS IS THE FIX ---
-    # Import the scanner engine *inside* the task function.
-    # This breaks the circular import at startup.
-    from .scanner.engine import run_scan
-    # --- END OF FIX ---
 
-    print(f"BACKGROUND WORKER: Starting scan for run_id: {run_id}")
-    try:
-        run_scan(run_id, scan_name, api_endpoint, api_key, api_model_identifier, llama_guard_soft_block)
-        print(f"BACKGROUND WORKER: Scan for run_id {run_id} completed successfully.")
-    except Exception as e:
-        print(f"BACKGROUND WORKER: A critical error occurred during scan for run_id {run_id}: {e}")
-        raise
+
+@dramatiq.actor(queue_name="gpu", max_retries=1, time_limit=TWENTY_FOUR_HOURS) # 2-hour time limit for full scans
+def execute_scan_with_mode(run_id, api_config, scan_mode, llama_guard_soft_block=False):
+    """
+    Executes a security scan based on the selected mode.
+    Handles 'payloads_only', 'garak_only', and 'both'.
+    """
+    # --- DYNAMIC IMPORTS INSIDE THE TASK ---
+    from . import app, db_session
+    from .models import TestRun
+    from .scanner.engine import run_scan as run_payload_scan
+    from .scanner.garak_cli_runner import GarakCLIRunner, convert_garak_results_to_test_results
     
-@dramatiq.actor(queue_name="gpu", max_retries=0)
-def execute_single_test(run_id, test_case_data, api_config, llama_guard_soft_block=False):
+    print(f"BACKGROUND WORKER: Starting scan for run_id: {run_id}, mode: {scan_mode}")
+    
+    with app.app_context():
+        session = db_session()
+        try:
+            test_run = session.query(TestRun).filter_by(id=run_id).first()
+            if not test_run:
+                print(f"❌ WORKER: Could not find TestRun with ID {run_id}. Aborting task.")
+                return
+
+            # --- Mode 1: Payloads Scan ---
+            if scan_mode in ["payloads_only", "both"]:
+                print(f"  -> WORKER: Running payload-based tests for run {run_id}...")
+                run_payload_scan(
+                    run_id,
+                    test_run.scan_name,
+                    api_config["endpoint"],
+                    api_config["key"],
+                    api_config["model_id"],
+                    llama_guard_soft_block
+                )
+                print(f"  -> WORKER: Payload-based tests completed for run {run_id}.")
+
+            # --- Mode 2: Garak CLI Scan (Corrected) ---
+            if scan_mode in ["garak_only", "both"]:
+                print(f"  -> WORKER: Running Garak CLI scan for run {run_id}...")
+                garak_runner = GarakCLIRunner()
+                try:
+                    # --- THIS IS THE FIX ---
+                    # The function now returns only the list of probe summaries.
+                    probe_summaries = garak_runner.run_garak_scan(api_config)
+
+                    if probe_summaries:
+                        print(f"  -> WORKER: Garak scan successful. Converting {len(probe_summaries)} probe summaries to database format...")
+                        garak_test_results = convert_garak_results_to_test_results(probe_summaries, run_id)
+                        session.add_all(garak_test_results)
+                        session.commit()
+                        print(f"  -> WORKER: Saved {len(garak_test_results)} Garak results to the database.")
+                    else:
+                        print(f"  -> WORKER: Garak scan failed or produced no results.")
+                    # --- END OF FIX ---
+                finally:
+                    # The cleanup call was inside the Garak runner, which is correct.
+                    # No need to call it here.
+                    pass
+
+            # --- Finalize the TestRun ---
+            # Recalculate the final score based on ALL results now in the DB
+            test_run_to_update = session.query(TestRun).get(run_id)
+            if test_run_to_update and test_run_to_update.results:
+                all_results = test_run_to_update.results
+                passed_count = sum(1 for r in all_results if r.status == "PASS")
+                test_run_to_update.overall_score = passed_count / len(all_results)
+            
+            session.commit()
+            print(f"✅ WORKER: Scan for run_id {run_id} (mode: {scan_mode}) is fully complete.")
+
+        except Exception as e:
+            print(f"❌ WORKER: A critical error occurred in execute_scan_with_mode for run_id {run_id}: {e}")
+            import traceback
+            traceback.print_exc()
+            session.rollback()
+            # Optionally, update the test run to an ERROR state
+        finally:
+            session.close()
+
+@dramatiq.actor(queue_name="gpu", max_retries=0, time_limit=TWENTY_FOUR_HOURS)
+def execute_ad_hoc_test(run_id, test_case_data, api_config, llama_guard_soft_block=False):
     """
-    Dramatiq task to run a single, ad-hoc test case.
+    Dramatiq task to run a single, ad-hoc test case provided directly.
     """
-    # We need to import the engine components inside the task
+    # --- DYNAMIC IMPORTS ---
     import asyncio
-    from .scanner.engine import process_redteam_case, process_technical_case, db_session, TestRun
+    import aiohttp
+    from . import app, db_session
+    from .models import TestRun
+    from .scanner.engine import process_redteam_case, process_technical_case
     from .scanner.llm_assessor import LLMAssessor
     from .scanner.llama_guard import LlamaGuardEvaluator
     from .scanner.garak_loader import get_analyzer
-    import aiohttp
 
-    print(f"BACKGROUND WORKER: Starting single test for run_id: {run_id} with soft_block={llama_guard_soft_block}")
-    
-    tools = {
-        "assessor": LLMAssessor(),
-        "llama_guard": LlamaGuardEvaluator(),
-        "forensic_analyzer": get_analyzer()
-    }
-    
-    session = db_session()
-    try:
-        async def run():
-            async with aiohttp.ClientSession() as http_session:
-                if "undesirable_outcome" in test_case_data:
-                    # Red team cases don't use the Llama Guard block, so no change needed here.
-                    await process_redteam_case(http_session, session, tools, run_id, test_case_data, api_config)
-                else:
-                    # --- THIS IS THE FIX ---
-                    # Pass the llama_guard_soft_block flag to the technical case processor.
-                    await process_technical_case(
-                        http_session, 
-                        session, 
-                        tools, 
-                        run_id, 
-                        test_case_data, 
-                        api_config, 
-                        llama_guard_soft_block 
-                    )
-                    
-        asyncio.run(run())
+    print(f"BACKGROUND WORKER: Starting ad-hoc test for run_id: {run_id}")
 
-        # Update the overall score (it will be 0 or 100)
-        # Rename the variable to avoid collision with the function name.
-        test_run_to_update = session.query(TestRun).get(run_id)
-        if test_run_to_update and test_run_to_update.results:
-            test_run_to_update.overall_score = 1.0 if test_run_to_update.results[0].status == 'PASS' else 0.0
+    with app.app_context():
+        session = db_session()
+        try:
+            tools = {
+                "assessor": LLMAssessor(),
+                "llama_guard": LlamaGuardEvaluator(),
+                "forensic_analyzer": get_analyzer()
+            }
 
-        session.commit()
-        print(f"BACKGROUND WORKER: Single test for run_id {run_id} completed.")
-    except Exception as e:
-        print(f"BACKGROUND WORKER: Error in single test for run_id {run_id}: {e}")
-        session.rollback()
-        raise
-    finally:
-        session.close()
+            async def run():
+                async with aiohttp.ClientSession() as http_session:
+                    # Dispatch to the correct processor based on the test case structure
+                    if "undesirable_outcome" in test_case_data:
+                        await process_redteam_case(http_session, session, tools, run_id, test_case_data, api_config)
+                    else:
+                        await process_technical_case(http_session, session, tools, run_id, test_case_data, api_config, llama_guard_soft_block)
+            
+            asyncio.run(run())
+
+            # Finalize the run score
+            test_run_to_update = session.query(TestRun).get(run_id)
+            if test_run_to_update and test_run_to_update.results:
+                all_results = test_run_to_update.results
+                passed_count = sum(1 for r in all_results if r.status == "PASS")
+                test_run_to_update.overall_score = passed_count / len(all_results)
+            
+            session.commit()
+            print(f"✅ WORKER: Ad-hoc test for run_id {run_id} is complete.")
+
+        except Exception as e:
+            print(f"❌ WORKER: A critical error occurred in ad-hoc test for run_id {run_id}: {e}")
+            import traceback
+            traceback.print_exc()
+            session.rollback()
+        finally:
+            session.close()

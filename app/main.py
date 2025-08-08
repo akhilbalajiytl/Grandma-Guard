@@ -78,7 +78,7 @@ from . import db_session
 from .models import RuntimeLog, TestResult, TestRun
 from .auth import User, users
 from .scanner.runtime_scanner import scan_and_respond_in_realtime
-from .tasks import execute_full_scan
+# from .tasks import execute_full_scan  # Commented out - function doesn't exist
 
 # A Blueprint is a way to organize a group of related views and other code.
 # Instead of registering views and other code directly with an application,
@@ -145,57 +145,65 @@ def index():
 @login_required
 def run_new_scan():
     """
-    Initiates a new security scan by sending a task to the background worker.
-    This version includes robust exception handling to debug startup errors.
+    Initiates a new security scan with support for multiple scan modes.
     """
+    from .tasks import execute_scan_with_mode
     try:
-        print("[WEBAPP DEBUG] Inside run_new_scan...")
-        scan_name = request.form["scan_name"]
-        api_model_identifier = request.form["api_model_identifier"]
-        api_endpoint = request.form["api_endpoint"]
-        api_key = request.form["api_key"]
+        form_data = request.form
+        scan_name = form_data.get("scan_name", "Untitled Scan")
+        scan_mode = form_data.get("scan_mode", "payloads_only")  # NEW: scan mode selection
         
-        llama_guard_soft_block = request.form.get('llama_guard_soft_block') == 'true'
-        print("[WEBAPP DEBUG] Form data retrieved successfully.")
-
-        if not all([scan_name, api_model_identifier, api_endpoint, api_key]):
-            print("[WEBAPP DEBUG] Missing form fields.")
-            return "Error: All fields are required.", 400
-
-        print("[WEBAPP DEBUG] Creating TestRun object in database...")
+        # Validate scan mode
+        valid_modes = ["payloads_only", "garak_only", "both"]
+        if scan_mode not in valid_modes:
+            flash(f"Invalid scan mode. Must be one of: {', '.join(valid_modes)}", "error")
+            return redirect(url_for("main.index"))
+        
+        # API Configuration
+        api_config = {
+            "endpoint": form_data.get("api_endpoint"),
+            "key": form_data.get("api_key"),
+            "model_id": form_data.get("api_model_identifier")
+        }
+        
+        if not all(api_config.values()):
+            flash("Please provide API Endpoint, API Key, and Model Identifier.", "error")
+            return redirect(url_for("main.index"))
+        
+        # LlamaGuard configuration
+        llama_guard_soft_block = form_data.get('llama_guard_soft_block') == 'true'
+        
+        # Create new test run
         new_run = TestRun(scan_name=scan_name)
         db_session.add(new_run)
         db_session.commit()
-        run_id = new_run.id
-        print(f"[WEBAPP DEBUG] TestRun created with ID: {run_id}")
-
-        print("[WEBAPP DEBUG] Preparing to send task to Dramatiq...")
-        execute_full_scan.send(
-            run_id, 
-            scan_name,
-            api_endpoint, 
-            api_key, 
-            api_model_identifier,
-            llama_guard_soft_block
-        )
-        print(f"[WEBAPP DEBUG] Task for run_id {run_id} sent successfully.")
         
-        print("[WEBAPP DEBUG] Redirecting to index...")
+        # Import here to avoid circular imports
+        from .tasks import execute_scan_with_mode
+        
+        # Send task to background worker with scan mode
+        execute_scan_with_mode.send(new_run.id, api_config, scan_mode, llama_guard_soft_block)
+        
+        mode_description = {
+            "payloads_only": "existing payloads only",
+            "garak_only": "garak probes only", 
+            "both": "both existing payloads and garak probes"
+        }
+        
+        flash(f"Started scan '{scan_name}' ({mode_description[scan_mode]}). Results will appear shortly.", "success")
         return redirect(url_for("main.index"))
-
+        
     except Exception as e:
-        # --- THIS IS THE CRITICAL DEBUGGING CODE ---
-        # If ANY error happens in the block above, it will be caught here.
-        print("\n" + "="*50)
         print("!!!!!! A CRITICAL ERROR OCCURRED IN run_new_scan !!!!!!")
         print(f"ERROR TYPE: {type(e).__name__}")
         print(f"ERROR DETAILS: {e}")
         print("\n--- FULL TRACEBACK ---")
+        import traceback
         traceback.print_exc()
         print("="*50 + "\n")
         
-        # Return a 500 error response, but now the log will have the details.
-        return "A critical server error occurred. Please check the webapp logs.", 500
+        flash("An error occurred while starting the scan. Please check the logs.", "error")
+        return redirect(url_for("main.index"))
 
 
 @main.route("/api/results/<int:run_id>")
@@ -306,7 +314,7 @@ def api_results(run_id):
             # baseline_status": r.baseline_status,
             "garak_status": r.garak_status,
             "llama_guard_status": r.llama_guard_status,
-            "judge_status": "FAIL" if r.assessment_details and any(t.get('is_undesirable') for t in r.assessment_details) else ("PASS" if r.assessment_details else "N/A"),
+            "judge_status": "FAIL" if r.assessment_details and isinstance(r.assessment_details, list) and any(t.get('is_undesirable') for t in r.assessment_details) else ("PASS" if r.assessment_details else "N/A"),
             "payload": r.payload,
             "response": r.response,
         }
@@ -852,36 +860,31 @@ def red_team_report(run_id):
 @main.route("/run-single-test", methods=["POST"])
 @login_required
 def run_single_test():
-    # --- 1. Extract Test Case Data ---
     form_data = request.form
     save_option = form_data.get("save_option")
-    follow_ups = form_data.getlist('follow_up_payloads')
     test_name = form_data.get("test_name", "Unnamed Live Test")
     
-    # DEBUG: Log the follow-up data
-    print(f"DEBUG: Extracted follow_ups: {follow_ups}")
-    print(f"DEBUG: Cleaned follow_ups: {[f for f in follow_ups if f.strip()]}")
-    
+    # --- 1. Build the Test Case Data from the form ---
+    follow_ups = form_data.getlist('follow_up_payloads')
     test_case_data = {
         "category": form_data.get("category", "Ad-Hoc Test"),
         "payload": form_data.get("payload", ""),
         "follow_up_payloads": [f for f in follow_ups if f.strip()],
     }
-    # Only add red team fields if they are provided
     undesirable_outcome = form_data.get("undesirable_outcome", "")
     if undesirable_outcome.strip():
         test_case_data["undesirable_outcome"] = undesirable_outcome.strip()
         test_case_data["desired_outcome"] = form_data.get("desired_outcome", "").strip()
     
-    # --- 2. Handle 'Permanent' Save Option ---
+    # --- 2. Handle the 'Permanent' Save Option ---
     if save_option == "permanent":
+        # This logic is correct and remains unchanged.
         payloads_file = "app/scanner/payloads.yml"
         try:
             with open(payloads_file, 'r') as f:
                 payloads = yaml.safe_load(f) or {}
-            # Sanitize the name to make it a valid YAML key (no spaces, lowercase)
+            
             new_key = test_name.lower().replace(' ', '_').replace('-', '_')
-            # Add a timestamp to ensure uniqueness
             timestamp = datetime.now().strftime("%S")
             new_key = f"{new_key}_{timestamp}"
             payloads[new_key] = test_case_data
@@ -895,8 +898,13 @@ def run_single_test():
         
         return redirect(url_for("main.index"))
 
+    # --- 3. Handle the 'Temporary' Run Option ---
     elif save_option == "temporary":
-        from .tasks import execute_single_test
+        # --- THIS IS THE FIX ---
+        # We need a new, dedicated task for single ad-hoc tests.
+        # It's cleaner than trying to reuse the main scan task.
+        from .tasks import execute_ad_hoc_test
+
         api_config = {
             "endpoint": form_data.get("live_test_api_endpoint"),
             "key": form_data.get("live_test_api_key"),
@@ -908,16 +916,37 @@ def run_single_test():
             flash("For a temporary test, you must provide the Model, Endpoint, and API Key.", "error")
             return redirect(url_for("main.index"))
 
-        # --- USE THE NEW TEST NAME FOR THE SCAN NAME ---
         scan_name = f"Temporary Test: {test_name}"
-        # --- END OF CHANGE ---
         new_run = TestRun(scan_name=scan_name)
         db_session.add(new_run)
         db_session.commit()
 
-        execute_single_test.send(new_run.id, test_case_data, api_config, llama_guard_soft_block)
+        # Send the single test case and config to the new dedicated task.
+        execute_ad_hoc_test.send(
+            new_run.id, 
+            test_case_data, 
+            api_config, 
+            llama_guard_soft_block
+        )
+        # --- END OF FIX ---
+
         flash(f"Started temporary scan '{scan_name}'. Results will appear shortly.", "success")
         return redirect(url_for("main.index"))
 
     flash("Invalid save option selected.", "error")
     return redirect(url_for("main.index"))
+
+
+@main.route('/report/garak/<int:run_id>')
+@login_required
+def garak_report(run_id):
+    """Displays a detailed report for a Garak scan."""
+    # --- THIS IS THE FIX ---
+    test_run = db_session.query(TestRun).filter_by(id=run_id).first()
+    if not test_run:
+        abort(404)
+    # --- END OF FIX ---
+    
+    garak_results = [r for r in test_run.results if r.owasp_category.startswith("GARAK_")]
+    
+    return render_template("garak_report.html", run=test_run, results=garak_results)

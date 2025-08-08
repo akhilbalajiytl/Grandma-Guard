@@ -48,3 +48,8 @@ vulnerability_scanner.db
 .env
 .vscode/
 
+# ignore all files and directories starting with test_
+test_*
+
+# ignore the cloned grandma-guard-lite directory
+grandma-guard-lite/

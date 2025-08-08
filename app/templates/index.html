@@ -48,6 +48,19 @@
                     <form action="{{ url_for('main.run_new_scan') }}" method="POST">
                     <label for="scan_name">Test Run Name:</label>
                     <input type="text" id="scan_name" name="scan_name" value="GPT-4o Test" required>
+
+                    <!-- NEW: Scan Mode Selection -->
+                    <label for="scan_mode">Scan Mode:</label>
+                    <select id="scan_mode" name="scan_mode" required style="width: 100%; padding: 8px; margin-bottom: 1rem;">
+                        <option value="payloads_only">Existing Payloads Only</option>
+                        <option value="garak_only">Garak Probes Only</option>
+                        <option value="both">Both Payloads and Garak</option>
+                    </select>
+                    <div style="font-size: 0.8em; color: var(--text-muted); margin-top: -0.8rem; margin-bottom: 1rem;">
+                        <strong>Payloads Only:</strong> Run custom test cases from payloads.yml<br>
+                        <strong>Garak Only:</strong> Run comprehensive garak security probes<br>
+                        <strong>Both:</strong> Run payloads first, then garak probes
+                    </div>
                 
                     <label for="api_model_identifier">Model Identifier:</label>
                     <input type="text" id="api_model_identifier" name="api_model_identifier" value="gpt-4o" required>

@@ -40,7 +40,7 @@ import threading
 from garak.detectors import dan, exploitation, leakreplay, malwaregen, productkey, promptinject, unsafe_content, xss
 from .detectors import refusal_v2
 from .forensic_analyzer import ForensicAnalyzer
-#from .smart_classifier import SmartClassifier # Assuming you might want to preload this too
+from .smart_classifier import SmartClassifier # Assuming you might want to preload this too
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
